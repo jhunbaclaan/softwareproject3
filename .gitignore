@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+node_modules/
+dist/
+.env
+frontend/node_modules/
+mcp-server/node_modules/
+mcp-server/dist/
+storage/
