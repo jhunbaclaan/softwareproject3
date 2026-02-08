@@ -7,3 +7,4 @@ frontend/node_modules/
 mcp-server/node_modules/
 mcp-server/dist/
 storage/
+/.ai/mcp/mcp.json
