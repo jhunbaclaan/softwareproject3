@@ -4,3 +4,5 @@ pydantic
 python-dotenv
 python-multipart
 requests
+anthropic>=0.79.0
+mcp>=1.26.0
