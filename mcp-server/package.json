@@ -4,14 +4,19 @@
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod 755 dist/server.js",
     "start": "node dist/server.js"
   },
+  "bin": {
+    "nexus-mcp-server": "./dist/server.js"
+  },
   "dependencies": {
-    "@audiotool/nexus": "^0.0.11"
+    "@audiotool/nexus": "^0.0.11",
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
-    "typescript": "^5.5.4",
-    "@types/node": "^20.0.0"
+    "@types/node": "^20.19.33",
+    "typescript": "^5.9.3"
   }
 }
