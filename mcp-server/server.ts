@@ -59,6 +59,7 @@ server.registerTool(
         const document = await client.createSyncedDocument({
             project: projectURL || "",
         });
+        // begin sync
         await document.start();
         return {
             content: [
