@@ -4,7 +4,7 @@
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc && chmod 755 dist/server.js",
+    "build": "tsc",
     "start": "node dist/server.js"
   },
   "bin": {

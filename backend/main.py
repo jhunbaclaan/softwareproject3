@@ -1,28 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional, List
 import asyncio
 import os
 from agents.mcp_client_new import MCPClient
+from models import TraceItem, AgentRequest, AgentResponse
 
 app = FastAPI()
-
-# Define request/response models matching frontend expectations
-class TraceItem(BaseModel):
-    id: str
-    label: str
-    detail: str
-    status: str  # 'pending' | 'running' | 'done' | 'error'
-
-class AgentRequest(BaseModel):
-    prompt: str
-    keywords: List[str] = []
-    loop: int = 1
-
-class AgentResponse(BaseModel):
-    reply: str
-    trace: Optional[List[TraceItem]] = None
 
 app.add_middleware(
     CORSMiddleware,
@@ -49,13 +32,13 @@ async def run_agent(request: AgentRequest) -> AgentResponse:
     """
     try:
         # Get the MCP server script path from environment or use default
-        # Resolves to ../mcp-server/server.ts relative to this file's location
+        # Resolves to ../mcp-server/dist/server.js relative to this file's location
         if mcp_server_path := os.getenv("MCP_SERVER_PATH"):
             pass  # Use environment variable if set
         else:
-            # Default path: go up from backend folder to root, then into mcp-server
+            # Default path: go up from backend folder to root, then into mcp-server/dist
             backend_dir = os.path.dirname(__file__)
-            mcp_server_path = os.path.join(backend_dir, "..", "mcp-server", "server.ts")
+            mcp_server_path = os.path.join(backend_dir, "..", "mcp-server", "dist", "server.js")
         
         # Create and initialize the MCP client
         client = MCPClient()

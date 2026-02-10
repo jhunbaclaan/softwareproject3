@@ -1,0 +1,8 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Backend + Frontend + MCP Server" type="CompoundRunConfigurationType">
+    <toRun name="MCP Server" type="js.build_tools.npm" />
+    <toRun name="Frontend" type="js.build_tools.npm" />
+    <toRun name="Backend" type="PythonConfigurationType" />
+    <method v="2" />
+  </configuration>
+</component>
