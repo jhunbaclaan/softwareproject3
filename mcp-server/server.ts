@@ -35,6 +35,7 @@ async function getClient(){
 }
 
 // define tools
+// add entity tool
 server.registerTool(
     "add-entity",
     {
@@ -61,4 +62,30 @@ server.registerTool(
             ],
         };
     },
+);
+// remove entity tool 
+server.registerTool(
+    "remove-entity",
+    {
+        description: "Remove an entity from the Audiotool project",
+        inputSchema: z.object({
+            entityId: z.string().describe("ID of the entity to remove"),
+        }),
+    },
+    async (args: { entityId: string }) => {
+        const { entityId } = args;
+        const client = await getClient();
+        
+        // implementation wip
+        // e.g.: await client.document.removeEntity({ id: entityId });
+        
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `Removed entity with ID ${entityId}`,
+                },
+            ],
+        };
+    }
 );
