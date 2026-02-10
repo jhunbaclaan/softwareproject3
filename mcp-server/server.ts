@@ -65,8 +65,8 @@ server.registerTool(
                 {
                     type: "text",
                     text: projectURL ?
-                    'Opened document for project: ${projectURL}':
-                    'Project is now in ${mode} mode',
+                    `Opened document for project: ${projectURL}`:
+                    'Project opened successfully',
                 },
             ],
         };
@@ -79,7 +79,7 @@ server.registerTool(
         description: "Add an entity to the Audiotool project",
         inputSchema: z.object({
             entityType: z.string().describe("Type of entity to add (e.g., 'synth', 'drum-machine')"),
-            properties: z.record(z.string(), z.any()).describe("Properties for the entity"),
+            properties: z.record(z.string(), z.any()).optional().describe("Properties for the entity"),
             x: z.number().describe("X position"),
             y: z.number().describe("Y position"),
         }),
