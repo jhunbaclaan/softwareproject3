@@ -2,7 +2,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { getLoginStatus, createAudiotoolClient } from "@audiotool/nexus";
+import { getLoginStatus, createAudiotoolClient, SyncedDocument } from "@audiotool/nexus";
 
 // creating server instance
 const server = new McpServer({
@@ -10,8 +10,9 @@ const server = new McpServer({
     version: "1.0.0",
 });
 
-// client reference
+// client, document reference
 let audiotoolClient: Awaited<ReturnType<typeof createAudiotoolClient>> | null = null;
+let document: SyncedDocument | null = null;
 
 // helper for authenticated client
 async function getClient(){
@@ -33,8 +34,44 @@ async function getClient(){
 
     return audiotoolClient;
 }
+// document helper
+async function getDocument(): Promise<SyncedDocument> {
+    if(!document){
+        throw new Error("No document open. Use the 'open-document' tool to open a project first.");
+    }
+    return document;
+}
 
 // define tools
+// open document tool
+server.registerTool(
+    "open-document",
+    {
+        description: "Open an Audiotool document via project URL or ID.",
+        inputSchema: z.object({
+            projectURL: z.string().optional().describe("URL/ID of the Audiotool project to use"),
+        }),
+    },
+    async (args: { projectURL?: string}) => {
+        const { projectURL } = args;
+        const client = await getClient();
+
+        const document = await client.createSyncedDocument({
+            project: projectURL || "",
+        });
+        await document.start();
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: projectURL ?
+                    'Opened document for project: ${projectURL}':
+                    'Project is now in ${mode} mode',
+                },
+            ],
+        };
+    },
+)
 // add entity tool
 server.registerTool(
     "add-entity",
@@ -42,16 +79,28 @@ server.registerTool(
         description: "Add an entity to the Audiotool project",
         inputSchema: z.object({
             entityType: z.string().describe("Type of entity to add (e.g., 'synth', 'drum-machine')"),
+            properties: z.record(z.string(), z.any()).describe("Properties for the entity"),
             x: z.number().describe("X position"),
             y: z.number().describe("Y position"),
         }),
     },
-    async (args: { entityType: string, x: number, y: number }) => {
-        const { entityType, x, y } = args;
-        const client = await getClient();
+    async (args: { entityType: string, properties?: Record<string, any>, x?: number, y?: number }) => {
+        const { entityType, properties, x, y } = args;
+        const doc = await getDocument();
         
         // implementation wip
-        // e.g.: await client.document.addEntity({ type: entityType, position: { x, y } });
+        await doc.modify((t) => {
+            const newEntity = t.create(entityType as any, properties ||{});
+            // if position provided, then place on given coords
+            if(x !== undefined && y !== undefined){
+                t.create("desktopPlacement" as any, {
+                    entity: newEntity.location,
+                    x: x,
+                    y: y
+                })
+            }
+            return newEntity;
+        });
         
         return {
             content: [
@@ -69,21 +118,26 @@ server.registerTool(
     {
         description: "Remove an entity from the Audiotool project",
         inputSchema: z.object({
-            entityId: z.string().describe("ID of the entity to remove"),
+            entityID: z.string().describe("ID of the entity to remove"),
+            removeDependencies: z.boolean().optional().default(false).describe("If true, then any entities that depend/are connected to this one are also removed."),
         }),
     },
-    async (args: { entityId: string }) => {
-        const { entityId } = args;
-        const client = await getClient();
+    async (args: { entityID: string, removeDependencies?: boolean }) => {
+        const { entityID, removeDependencies } = args;
+        const doc = await getDocument();
 
         // implementation wip
-        // e.g.: await client.document.removeEntity({ id: entityId });
-
+        await doc.modify((t) => {
+            if (removeDependencies){
+                t.removeWithDependencies(entityID);
+            }
+            else t.remove(entityID);
+        });
         return {
             content: [
                 {
                     type: "text",
-                    text: `Removed entity with ID ${entityId}`,
+                    text: `Removed entity with ID ${entityID}`,
                 },
             ],
         };
