@@ -348,6 +348,89 @@ server.registerTool(
         }
     }
 );
+// update entity value tool
+// a 'value' refers to the entity's main parameters like delay, volume, etc.
+server.registerTool(
+    "update-entity-value",
+    {
+        description: "Update an entity's parameter/field value",
+        inputSchema: z.object({
+            entityID: z.string().describe("ID of the entity to update"),
+            fieldName: z.string().describe("Name of the field to update (e.g., 'delayTime', 'feedback', 'isActive')"),
+            value: z.union([z.string(), z.number(), z.boolean()]).describe("New value for the field"),
+        }),
+    },
+    async (args: { entityID: string, fieldName: string, value: string | number | boolean }) => {
+        const { entityID, fieldName, value } = args;
+        const doc = await getDocument();
+
+        await doc.modify((t) => {
+            // Use getEntity to find the entity by ID
+            const entity = t.entities.getEntity(entityID);
+            if (!entity) {
+                throw new Error(`Entity with ID ${entityID} not found`);
+            }
+
+            const field = (entity.fields as any)[fieldName];
+            if (!field) {
+                throw new Error(`Field '${fieldName}' not found on entity ${entityID}`);
+            }
+
+            t.update(field, value);
+        });
+
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `Updated ${fieldName} of entity ${entityID} to ${value}`,
+                },
+            ],
+        };
+    },
+);
+// update entity position tool
+server.registerTool(
+    "update-entity-position",
+    {
+        description: "Update an entity's position on the desktop",
+        inputSchema: z.object({
+            entityID: z.string().describe("ID of the entity to move"),
+            x: z.number().describe("New X position"),
+            y: z.number().describe("New Y position"),
+        }),
+    },
+    async (args: { entityID: string, x: number, y: number }) => {
+        const { entityID, x, y } = args;
+        const doc = await getDocument();
+
+        await doc.modify((t) => {
+            // Find all desktop placements and filter for the one pointing to this entity
+            // Cast to 'any' to bypass TypeScript's strict entity type checking
+            const placements = t.entities.ofTypes("desktopPlacement" as any).get();
+            const placement = placements.find(p => {
+                const entityField = (p.fields as any).entity;
+                return entityField?.value?.id === entityID;
+            });
+
+            if (!placement) {
+                throw new Error(`Desktop placement for entity ${entityID} not found. Entity may not be placed on desktop.`);
+            }
+
+            t.update((placement.fields as any).x, x);
+            t.update((placement.fields as any).y, y);
+        });
+
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `Moved entity ${entityID} to position (${x}, ${y})`,
+                },
+            ],
+        };
+    },
+);
 
 // Start the server
 const transport = new StdioServerTransport();
