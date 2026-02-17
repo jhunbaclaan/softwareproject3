@@ -405,29 +405,26 @@ server.registerTool(
         const doc = await getDocument();
 
         await doc.modify((t) => {
-            // Find all desktop placements and filter for the one pointing to this entity
-            // Cast to 'any' to bypass TypeScript's strict entity type checking
-            const placements = t.entities.ofTypes("desktopPlacement" as any).get();
-            const placement = placements.find(p => {
-                const entityField = (p.fields as any).entity;
-                return entityField?.value?.id === entityID;
-            });
-
-            if (!placement) {
-                throw new Error(`Desktop placement for entity ${entityID} not found. Entity may not be placed on desktop.`);
+            const entity = t.entities.getEntity(entityID);
+            if (!entity) {
+                throw new Error(`Entity with ID ${entityID} not found`);
             }
 
-            t.update((placement.fields as any).x, x);
-            t.update((placement.fields as any).y, y);
+            const fields = entity.fields as any;
+
+            if (!fields.positionX || !fields.positionY) {
+                throw new Error(`Entity ${entityID} does not have positionX/positionY fields`);
+            }
+
+            t.update(fields.positionX, x);
+            t.update(fields.positionY, y);
         });
 
         return {
-            content: [
-                {
-                    type: "text",
-                    text: `Moved entity ${entityID} to position (${x}, ${y})`,
-                },
-            ],
+            content: [{
+                type: "text",
+                text: `Moved entity ${entityID} to position (${x}, ${y})`,
+            }],
         };
     },
 );
