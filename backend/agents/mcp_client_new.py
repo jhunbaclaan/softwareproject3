@@ -55,6 +55,48 @@ class MCPClient:
         tools = response.tools
         print("\nConnected to server with tools:", [tool.name for tool in tools])
 
+    async def initialize_session(
+        self,
+        access_token: str,
+        expires_at: int,
+        client_id: str,
+        redirect_url: str,
+        scope: str,
+        project_url: str,
+        refresh_token: Optional[str] = None
+    ) -> str:
+        """Initialize authenticated session with auth tokens and project URL"""
+        print("[MCP Client] Initializing session...")
+        tool_args = {
+            "accessToken": access_token,
+            "expiresAt": expires_at,
+            "clientId": client_id,
+            "redirectUrl": redirect_url,
+            "scope": scope,
+            "projectUrl": project_url,
+        }
+
+        if refresh_token:
+            tool_args["refreshToken"] = refresh_token
+
+        print(f"[MCP Client] Calling initialize-session tool with project: {project_url}")
+
+        try:
+            # Add timeout to prevent infinite hanging
+            result = await asyncio.wait_for(
+                self.session.call_tool("initialize-session", tool_args),
+                timeout=30.0  # 30 second timeout
+            )
+            print("[MCP Client] Session initialized successfully!")
+            return str(result.content)
+        except asyncio.TimeoutError:
+            error_msg = "Session initialization timed out after 30 seconds. Check MCP server logs for details."
+            print(f"[MCP Client] ERROR: {error_msg}")
+            raise Exception(error_msg)
+        except Exception as e:
+            print(f"[MCP Client] ERROR initializing session: {str(e)}")
+            raise
+
     async def process_query(self, query: str) -> str:
         """Process a query using Gemini and available tools"""
         # Get available MCP tools and convert them to google.genai format
@@ -82,9 +124,9 @@ class MCPClient:
         # Build conversation history
         contents = [query]
 
-        # Initial Gemini API call
+        # Initial Gemini API call (async to avoid blocking the event loop)
         config = types.GenerateContentConfig(tools=tools) if tools else None
-        response = self.client.models.generate_content(
+        response = await self.client.aio.models.generate_content(
             model=self.model_name,
             contents=contents,
             config=config
@@ -113,16 +155,25 @@ class MCPClient:
                             tool_name = function_call.name
                             tool_args = dict(function_call.args) if function_call.args else {}
 
-                            print(f"Calling tool: {tool_name} with args: {tool_args}")
+                            print(f"[MCP Client] Calling tool: {tool_name} with args: {tool_args}")
 
                             # Call the MCP tool
                             result = await self.session.call_tool(tool_name, tool_args)
 
+                            print(f"[MCP Client] Tool result received. Type: {type(result)}")
+                            print(f"[MCP Client] Tool result content type: {type(result.content)}")
+                            print(f"[MCP Client] Tool result content: {result.content}")
+
                             # Build the function response
+                            result_str = str(result.content)
+                            print(f"[MCP Client] Building function response with result: {result_str[:200]}...")
+
                             function_response = types.Part.from_function_response(
                                 name=tool_name,
-                                response={"result": str(result.content)}
+                                response={"result": result_str}
                             )
+
+                            print(f"[MCP Client] Function response created successfully")
 
                             # Continue the conversation with the function result
                             contents = [
@@ -131,12 +182,23 @@ class MCPClient:
                                 types.Content(parts=[function_response], role="user")
                             ]
 
+                            print(f"[MCP Client] Calling Gemini with tool result...")
+
                             # Get next response from Gemini
-                            response = self.client.models.generate_content(
-                                model=self.model_name,
-                                contents=contents,
-                                config=config
-                            )
+                            try:
+                                response = await self.client.aio.models.generate_content(
+                                    model=self.model_name,
+                                    contents=contents,
+                                    config=config
+                                )
+                                print(f"[MCP Client] Gemini response received")
+                            except Exception as e:
+                                print(f"[MCP Client] ERROR calling Gemini after tool execution: {str(e)}")
+                                raise
+
+                            # Break out of the for loop to process the new response in the next iteration
+                            print(f"[MCP Client] Breaking to process new response in next iteration")
+                            break
 
                         # Collect text responses
                         elif hasattr(part, 'text') and part.text:

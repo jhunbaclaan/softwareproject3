@@ -7,7 +7,7 @@ import {
   type SyncedDocument,
 } from '@audiotool/nexus';
 import './App.css';
-import { runAgent } from './api';
+import { runAgent, type AuthTokens } from './api';
 
 type Role = 'user' | 'assistant';
 
@@ -55,6 +55,38 @@ const saveSetting = (key: string, value: string) => {
 };
 
 const formatError = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+const extractAuthTokens = (clientId: string, redirectUrl: string, scope: string): AuthTokens | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const accessToken = window.localStorage.getItem(`oidc_${clientId}_oidc_access_token`);
+  const expiresAtStr = window.localStorage.getItem(`oidc_${clientId}_oidc_expires_at`);
+  const refreshToken = window.localStorage.getItem(`oidc_${clientId}_oidc_refresh_token`);
+
+  if (!accessToken || !expiresAtStr) {
+    return null;
+  }
+
+  // Filter out invalid refresh token values
+  const validRefreshToken =
+    refreshToken &&
+    refreshToken !== 'undefined' &&
+    refreshToken !== 'null' &&
+    refreshToken.trim() !== ''
+      ? refreshToken
+      : undefined;
+
+  return {
+    accessToken,
+    expiresAt: parseInt(expiresAtStr, 10),
+    refreshToken: validRefreshToken,
+    clientId,
+    redirectUrl,
+    scope,
+  };
+};
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -114,6 +146,25 @@ export default function App() {
         scope: authConfig.scope.trim(),
       });
       setAuthStatus(status);
+
+      // DEBUG: Inspect the real LoginStatus interface
+      console.log('=== LoginStatus Object Inspection ===');
+      console.log('LoginStatus methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(status)));
+      console.log('LoginStatus properties:', Object.keys(status));
+      console.log('LoginStatus full object:', status);
+
+      // Try to call getToken if it exists
+      if (typeof (status as any).getToken === 'function') {
+        try {
+          const token = await (status as any).getToken();
+          console.log('getToken() returned type:', typeof token);
+          console.log('getToken() returned value:', token);
+        } catch (e) {
+          console.log('getToken() threw error:', e);
+        }
+      }
+
+      console.log('=================================');
 
       if (status.loggedIn) {
         const userName = await status.getUserName();
@@ -219,10 +270,26 @@ export default function App() {
     setInput('');
 
     try {
+      // Extract auth tokens if user is logged in
+      const authTokens = authStatus?.loggedIn
+        ? extractAuthTokens(
+            authConfig.clientId.trim(),
+            authConfig.redirectUrl.trim(),
+            authConfig.scope.trim()
+          )
+        : null;
+
+      // Include project URL if connected
+      const projectUrlToSend = projectStatus === 'connected' && projectUrl.trim()
+        ? projectUrl.trim()
+        : undefined;
+
       const response = await runAgent('http://127.0.0.1:8000', {
         prompt: trimmed,
         keywords: [],
         loop: 1,
+        authTokens: authTokens || undefined,
+        projectUrl: projectUrlToSend,
       });
       addMessage('assistant', response.reply);
     } catch (error) {

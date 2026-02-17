@@ -1,9 +1,20 @@
 export type HealthStatus = { status: string };
 
+export type AuthTokens = {
+  accessToken: string;
+  expiresAt: number;
+  refreshToken?: string;
+  clientId: string;
+  redirectUrl: string;
+  scope: string;
+};
+
 export type AgentRequest = {
   prompt: string;
   keywords: string[];
   loop: number;
+  authTokens?: AuthTokens;
+  projectUrl?: string;
 };
 
 export type AgentResponse = {
