@@ -1,4 +1,4 @@
-from fastapi import BackgroundTasks, FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import os
@@ -23,7 +23,7 @@ def health():
     return {"status": "ok"}
 
 @app.post("/agent/run")
-async def run_agent(request: AgentRequest, background_tasks: BackgroundTasks) -> AgentResponse:
+async def run_agent(request: AgentRequest) -> AgentResponse:
     """
     Process a user query through the Gemini + MCP agent.
 
@@ -70,24 +70,20 @@ async def run_agent(request: AgentRequest, background_tasks: BackgroundTasks) ->
         return AgentResponse(reply=error_msg, trace=None)
 
     finally:
-        # BackgroundTasks run AFTER the response is sent, but in the SAME asyncio
-        # task — so AsyncExitStack cancel scopes are exited in the correct task.
+        # Cleanup MUST happen in the same asyncio Task that called
+        # connect_to_server(), because the MCP library uses anyio cancel
+        # scopes that are bound to the Task they were entered in.
+        # Using BackgroundTasks or asyncio.wait_for would run cleanup in a
+        # different Task, causing "Attempted to exit cancel scope in a
+        # different task" RuntimeError.
         if client is not None:
-            background_tasks.add_task(_safe_cleanup, client)
-
-
-async def _safe_cleanup(client: MCPClient):
-    """Clean up MCP client with a timeout to prevent hanging."""
-    try:
-        await asyncio.wait_for(client.cleanup(), timeout=5.0)
-    except (asyncio.TimeoutError, asyncio.CancelledError):
-        # TimeoutError: cleanup took longer than 5s (MCP server won't exit)
-        # CancelledError: anyio cancel scopes inside the MCP library react to
-        #   asyncio.wait_for's cancellation — this is a BaseException in Python 3.9+
-        #   so 'except Exception' won't catch it.
-        logger.info("MCP client cleanup timed out — resources released")
-    except Exception as e:
-        logger.warning("MCP client cleanup error: %s", e)
+            try:
+                async with asyncio.timeout(5.0):
+                    await client.cleanup()
+            except (TimeoutError, asyncio.CancelledError):
+                logger.info("MCP client cleanup timed out — resources released")
+            except Exception as e:
+                logger.warning("MCP client cleanup error: %s", e)
 
 if __name__ == "__main__":
     import uvicorn

@@ -133,6 +133,7 @@ class MCPClient:
         )
 
         final_text = []
+        last_tool_result = None  # Track the last tool result for fallback
         max_iterations = 10  # Prevent infinite loops
         iteration = 0
 
@@ -164,8 +165,20 @@ class MCPClient:
                             print(f"[MCP Client] Tool result content type: {type(result.content)}")
                             print(f"[MCP Client] Tool result content: {result.content}")
 
-                            # Build the function response
-                            result_str = str(result.content)
+                            # Extract actual text from MCP content blocks
+                            # result.content is a list of TextContent objects; str() gives the repr,
+                            # not the text, which confuses Gemini and causes empty replies.
+                            if hasattr(result, 'content') and result.content:
+                                text_parts = []
+                                for block in result.content:
+                                    if hasattr(block, 'text') and block.text:
+                                        text_parts.append(block.text)
+                                result_str = "\n".join(text_parts) if text_parts else str(result.content)
+                            else:
+                                result_str = str(result)
+
+                            # Keep track of the last tool result for fallback
+                            last_tool_result = result_str
                             print(f"[MCP Client] Building function response with result: {result_str[:200]}...")
 
                             function_response = types.Part.from_function_response(
@@ -208,7 +221,11 @@ class MCPClient:
             if not has_function_call:
                 break
 
-        return "\n".join(final_text) if final_text else "No response generated."
+        if final_text:
+            return "\n".join(final_text)
+        if last_tool_result:
+            return f"Operation completed. Result: {last_tool_result}"
+        return "No response generated."
 
     async def chat_loop(self):
         """Run an interactive chat loop"""
