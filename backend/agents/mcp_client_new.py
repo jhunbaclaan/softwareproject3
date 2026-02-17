@@ -24,7 +24,7 @@ class MCPClient:
         if not api_key:
             raise ValueError("GEMINI_API_KEY environment variable is required")
         self.client = genai.Client(api_key=api_key)
-        self.model_name = "gemini-2.5-flash"
+        self.model_name = "gemini-2.5-flash-lite"
 
     async def connect_to_server(self, server_script_path: str):
         """Connect to an MCP server

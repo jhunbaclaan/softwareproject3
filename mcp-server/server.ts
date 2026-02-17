@@ -357,7 +357,7 @@ server.registerTool(
         inputSchema: z.object({
             entityID: z.string().describe("ID of the entity to update"),
             fieldName: z.string().describe("Name of the field to update (e.g., 'delayTime', 'feedback', 'isActive')"),
-            value: z.union([z.string(), z.number(), z.boolean()]).describe("New value for the field"),
+            value: z.number().describe("New value for the field"),
         }),
     },
     async (args: { entityID: string, fieldName: string, value: string | number | boolean }) => {
