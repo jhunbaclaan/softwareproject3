@@ -7,7 +7,7 @@ import {
   type SyncedDocument,
 } from '@audiotool/nexus';
 import './App.css';
-import { runAgent, type AuthTokens } from './api';
+import { runAgent, type AuthTokens, type ConversationMessage } from './api';
 
 type Role = 'user' | 'assistant';
 
@@ -16,6 +16,11 @@ type Message = {
   role: Role;
   content: string;
   timestamp: string;
+};
+
+type ProjectItem = {
+  name: string;
+  displayName: string;
 };
 
 const createId = () =>
@@ -56,6 +61,11 @@ const saveSetting = (key: string, value: string) => {
 
 const formatError = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+const extractProjectId = (name: string) => name.replace(/^projects\//, '');
+
+const getStudioUrl = (projectName: string) =>
+  `https://beta.audiotool.com/studio?project=${extractProjectId(projectName)}`;
+
 const extractAuthTokens = (clientId: string, redirectUrl: string, scope: string): AuthTokens | null => {
   if (typeof window === 'undefined') {
     return null;
@@ -69,7 +79,6 @@ const extractAuthTokens = (clientId: string, redirectUrl: string, scope: string)
     return null;
   }
 
-  // Filter out invalid refresh token values
   const validRefreshToken =
     refreshToken &&
     refreshToken !== 'undefined' &&
@@ -112,6 +121,14 @@ export default function App() {
   const [syncedDocument, setSyncedDocument] = useState<SyncedDocument | null>(null);
   const hasAutoChecked = useRef(false);
 
+  const [projectList, setProjectList] = useState<ProjectItem[]>([]);
+  const [projectListLoading, setProjectListLoading] = useState(false);
+  const [projectListError, setProjectListError] = useState<string | null>(null);
+  const [projectListToken, setProjectListToken] = useState('');
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [createProjectError, setCreateProjectError] = useState<string | null>(null);
+  const [connectedProjectName, setConnectedProjectName] = useState<string | null>(null);
+
   const addMessage = (role: Role, content: string) => {
     setMessages((prev) => [
       ...prev,
@@ -131,6 +148,40 @@ export default function App() {
     };
   }, [syncedDocument]);
 
+  const fetchProjects = async (currentClient: AudiotoolClient, append = false, token = '') => {
+    setProjectListLoading(true);
+    setProjectListError(null);
+    try {
+      const response = await currentClient.api.projectService.listProjects({
+        pageSize: 20,
+        pageToken: append ? token : '',
+      });
+      if (response instanceof Error) {
+        throw response;
+      }
+      const items: ProjectItem[] = (response.projects ?? []).map((p) => ({
+        name: p.name ?? '',
+        displayName: p.displayName || extractProjectId(p.name ?? ''),
+      }));
+      setProjectList((prev) => (append ? [...prev, ...items] : items));
+      setProjectListToken(response.nextPageToken ?? '');
+    } catch (error) {
+      setProjectListError(formatError(error));
+    } finally {
+      setProjectListLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (client) {
+      void fetchProjects(client);
+    } else {
+      setProjectList([]);
+      setProjectListToken('');
+      setConnectedProjectName(null);
+    }
+  }, [client]);
+
   const fetchLoginStatus = async () => {
     if (!authConfig.clientId.trim()) {
       setAuthError('Client ID is missing. Set VITE_AUDIOTOOL_CLIENT_ID in frontend/.env.');
@@ -146,25 +197,6 @@ export default function App() {
         scope: authConfig.scope.trim(),
       });
       setAuthStatus(status);
-
-      // DEBUG: Inspect the real LoginStatus interface
-      console.log('=== LoginStatus Object Inspection ===');
-      console.log('LoginStatus methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(status)));
-      console.log('LoginStatus properties:', Object.keys(status));
-      console.log('LoginStatus full object:', status);
-
-      // Try to call getToken if it exists
-      if (typeof (status as any).getToken === 'function') {
-        try {
-          const token = await (status as any).getToken();
-          console.log('getToken() returned type:', typeof token);
-          console.log('getToken() returned value:', token);
-        } catch (e) {
-          console.log('getToken() threw error:', e);
-        }
-      }
-
-      console.log('=================================');
 
       if (status.loggedIn) {
         const userName = await status.getUserName();
@@ -206,26 +238,25 @@ export default function App() {
     }
   };
 
-  const handleConnectProject = async () => {
+  const handleConnectToProject = async (projectName: string) => {
     if (!client) {
       setProjectError('Login first to create a synced document.');
       setProjectStatus('error');
       return;
     }
-    if (!projectUrl.trim()) {
-      setProjectError('Project URL is required.');
-      setProjectStatus('error');
-      return;
-    }
 
+    const studioUrl = getStudioUrl(projectName);
+    setProjectUrl(studioUrl);
+    setConnectedProjectName(projectName);
     setProjectStatus('connecting');
     setProjectError(null);
+    setMessages([]);
     try {
       if (syncedDocument) {
         await syncedDocument.stop();
       }
       const doc = await client.createSyncedDocument({
-        project: projectUrl.trim(),
+        project: studioUrl,
       });
       await doc.start();
       setSyncedDocument(doc);
@@ -233,6 +264,7 @@ export default function App() {
     } catch (error) {
       setProjectError(formatError(error));
       setProjectStatus('error');
+      setConnectedProjectName(null);
     }
   };
 
@@ -245,9 +277,43 @@ export default function App() {
       await syncedDocument.stop();
       setSyncedDocument(null);
       setProjectStatus('idle');
+      setConnectedProjectName(null);
     } catch (error) {
       setProjectError(formatError(error));
       setProjectStatus('error');
+    }
+  };
+
+  const handleCreateProject = async () => {
+    if (!client) return;
+    setIsCreatingProject(true);
+    setCreateProjectError(null);
+    try {
+      const response = await client.api.projectService.createProject({
+        project: {},
+      });
+      if (response instanceof Error) {
+        throw response;
+      }
+      const created = response.project;
+      if (created) {
+        const item: ProjectItem = {
+          name: created.name ?? '',
+          displayName: created.displayName || extractProjectId(created.name ?? ''),
+        };
+        setProjectList((prev) => [item, ...prev]);
+        await handleConnectToProject(item.name);
+      }
+    } catch (error) {
+      setCreateProjectError(formatError(error));
+    } finally {
+      setIsCreatingProject(false);
+    }
+  };
+
+  const handleLoadMore = () => {
+    if (client && projectListToken) {
+      void fetchProjects(client, true, projectListToken);
     }
   };
 
@@ -270,7 +336,6 @@ export default function App() {
     setInput('');
 
     try {
-      // Extract auth tokens if user is logged in
       const authTokens = authStatus?.loggedIn
         ? extractAuthTokens(
             authConfig.clientId.trim(),
@@ -279,10 +344,16 @@ export default function App() {
           )
         : null;
 
-      // Include project URL if connected
       const projectUrlToSend = projectStatus === 'connected' && projectUrl.trim()
         ? projectUrl.trim()
         : undefined;
+
+      const history: ConversationMessage[] = messages
+        .slice(-20)
+        .map((m) => ({
+          role: (m.role === 'user' ? 'user' : 'model') as 'user' | 'model',
+          content: m.content,
+        }));
 
       const response = await runAgent('http://127.0.0.1:8000', {
         prompt: trimmed,
@@ -290,6 +361,7 @@ export default function App() {
         loop: 1,
         authTokens: authTokens || undefined,
         projectUrl: projectUrlToSend,
+        messages: history.length > 0 ? history : undefined,
       });
       addMessage('assistant', response.reply);
     } catch (error) {
@@ -317,138 +389,204 @@ export default function App() {
       ? 'Synced document is live and ready for actions.'
       : projectStatus === 'error'
         ? 'Review the error and try connecting again.'
-        : 'Paste a project URL to start syncing.';
+        : 'Select a project to start syncing.';
+
+  const isActiveProject = (p: ProjectItem) =>
+    projectStatus === 'connected' && connectedProjectName === p.name;
 
   return (
     <div className="page">
-      <header className="header">
-        <div>
-          <p className="eyebrow">AudioTool Sample UI</p>
-          <h1>Nexus Agent Console</h1>
-          <p className="subtitle">Authenticate with Audiotool and connect a project.</p>
-          <p className="subtitle">Keep the chat open to guide the agent once a project is synced.</p>
-        </div>
-        <button type="button" className="ghost" onClick={handleReset}>
-          Clear chat
-        </button>
-      </header>
-
-      <section className="nexus-panel">
-        <div className="nexus-header">
-          <div>
-            <p className="eyebrow">Audiotool Nexus</p>
-            <h2>Account + Project Connection</h2>
-            <p className="subtitle">
-              Use your app credentials to sign in, then attach a project URL.
-            </p>
+      <div className="app-layout">
+        <aside className="sidebar">
+          <div className="sidebar-brand">
+            <p className="eyebrow">Nexus Agent</p>
+            <h1>Console</h1>
           </div>
-          <div className="nexus-actions">
-            <button type="button" className="ghost" onClick={fetchLoginStatus} disabled={isCheckingAuth}>
-              {isCheckingAuth ? 'Checking...' : 'Check login'}
+
+          <div className="sidebar-auth">
+            <div className="sidebar-auth-status">
+              <span className={authPillClass}>
+                {authStatus?.loggedIn ? 'Logged in' : 'Logged out'}
+              </span>
+              {authStatus?.loggedIn && authUser && (
+                <span className="sidebar-user">{authUser}</span>
+              )}
+            </div>
+            <div className="sidebar-auth-actions">
+              <button type="button" className="ghost small" onClick={fetchLoginStatus} disabled={isCheckingAuth}>
+                {isCheckingAuth ? 'Checking...' : 'Check'}
+              </button>
+              {authStatus?.loggedIn ? (
+                <button type="button" className="small" onClick={handleLogout}>
+                  Logout
+                </button>
+              ) : (
+                <button type="button" className="small" onClick={handleLogin} disabled={isCheckingAuth}>
+                  Login
+                </button>
+              )}
+            </div>
+          </div>
+
+          {authError && (
+            <div className="sidebar-error">{authError}</div>
+          )}
+
+          <div className="sidebar-divider" />
+
+          <div className="sidebar-projects">
+            <button
+              type="button"
+              className="create-project-btn"
+              onClick={handleCreateProject}
+              disabled={!client || isCreatingProject}
+            >
+              {isCreatingProject ? 'Creating...' : 'New Project'}
             </button>
-            {authStatus?.loggedIn ? (
-              <button type="button" onClick={handleLogout}>
-                Logout
-              </button>
-            ) : (
-              <button type="button" onClick={handleLogin} disabled={isCheckingAuth}>
-                Login
-              </button>
+
+            {createProjectError && (
+              <div className="sidebar-error">{createProjectError}</div>
+            )}
+
+            {client && (
+              <>
+                <h4 className="project-list-heading">Projects</h4>
+
+                {projectListError && (
+                  <div className="sidebar-error">{projectListError}</div>
+                )}
+
+                <div className="project-list-scroll">
+                  {projectListLoading && projectList.length === 0 ? (
+                    <p className="hint centered">Loading...</p>
+                  ) : projectList.length === 0 && !projectListError ? (
+                    <p className="hint centered">No projects yet.</p>
+                  ) : (
+                    <div className="project-list">
+                      {projectList.map((project) => {
+                        const active = isActiveProject(project);
+                        return (
+                          <div
+                            key={project.name}
+                            className={`project-list-item${active ? ' active' : ''}`}
+                          >
+                            <span className="project-list-item-name">
+                              {project.displayName}
+                            </span>
+                            <div className="project-list-item-actions">
+                              {active ? (
+                                <button
+                                  type="button"
+                                  className="ghost tiny"
+                                  onClick={handleDisconnectProject}
+                                >
+                                  Disconnect
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="tiny"
+                                  onClick={() => handleConnectToProject(project.name)}
+                                  disabled={projectStatus === 'connecting'}
+                                >
+                                  Connect
+                                </button>
+                              )}
+                              <a
+                                href={getStudioUrl(project.name)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="open-tab-link"
+                                title="Open in Audiotool"
+                              >
+                                &#8599;
+                              </a>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {projectListToken && (
+                  <button
+                    type="button"
+                    className="ghost tiny load-more-btn"
+                    onClick={handleLoadMore}
+                    disabled={projectListLoading}
+                  >
+                    {projectListLoading ? 'Loading...' : 'Load More'}
+                  </button>
+                )}
+              </>
             )}
           </div>
-        </div>
 
-        <div className="nexus-grid">
-          <div className="nexus-card">
-            <h3>Project connection</h3>
-            <label>
-              Project URL
-              <input
-                value={projectUrl}
-                onChange={(event) => setProjectUrl(event.target.value)}
-                placeholder="https://beta.audiotool.com/studio?project=your-project-id"
-              />
-            </label>
-            <div className="button-row">
-              <button type="button" onClick={handleConnectProject} disabled={projectStatus === 'connecting'}>
-                {projectStatus === 'connecting' ? 'Connecting...' : 'Connect project'}
-              </button>
-              <button type="button" className="ghost" onClick={handleDisconnectProject} disabled={!syncedDocument}>
-                Disconnect
-              </button>
+          <div className="sidebar-footer">
+            <div className="sidebar-footer-row">
+              <span className={projectPillClass}>{projectLabel}</span>
+              <span className="status-text">{projectDetail}</span>
             </div>
-            <p className="hint">
-              After connecting, keep this tab open so the agent can operate on the live document.
-            </p>
+            {projectError && (
+              <div className="sidebar-error">{projectError}</div>
+            )}
           </div>
-        </div>
+        </aside>
 
-        <div className="nexus-status">
-          <div>
-            <span className={authPillClass}>
-              {authStatus?.loggedIn ? 'Logged in' : 'Logged out'}
-            </span>
-            <span className="status-text">
-              {authStatus?.loggedIn
-                ? `User: ${authUser ?? 'Fetching user...'}`
-                : 'Sign in to authorize project access.'}
-            </span>
-          </div>
-          <div>
-            <span className={projectPillClass}>
-              {projectLabel}
-            </span>
-            <span className="status-text">
-              {projectDetail}
-            </span>
-          </div>
-          {(authError || projectError) && (
-            <div className="status-error">
-              {authError ? `Auth error: ${authError}` : null}
-              {authError && projectError ? ' | ' : null}
-              {projectError ? `Project error: ${projectError}` : null}
+        <div className="main-area">
+          <header className="main-header">
+            <div>
+              <p className="subtitle">
+                {projectStatus === 'connected'
+                  ? 'Project synced. Chat with the agent below.'
+                  : 'Connect a project in the sidebar to get started.'}
+              </p>
             </div>
-          )}
-        </div>
-      </section>
+            <button type="button" className="ghost small" onClick={handleReset}>
+              Clear chat
+            </button>
+          </header>
 
-      <main className="chat-card">
-        <div className="messages">
-          {messages.length === 0 ? (
-            <div className="empty">
-              <p>Start the conversation by sending a message.</p>
-            </div>
-          ) : (
-            messages.map((message) => (
-              <div key={message.id} className={`message ${message.role}`}>
-                <div className="message-meta">
-                  <span className="role">{message.role}</span>
-                  <span className="time">{message.timestamp}</span>
+          <main className="chat-card">
+            <div className="messages">
+              {messages.length === 0 ? (
+                <div className="empty">
+                  <p>Start the conversation by sending a message.</p>
                 </div>
-                <p>{message.content}</p>
-              </div>
-            ))
-          )}
-        </div>
+              ) : (
+                messages.map((message) => (
+                  <div key={message.id} className={`message ${message.role}`}>
+                    <div className="message-meta">
+                      <span className="role">{message.role}</span>
+                      <span className="time">{message.timestamp}</span>
+                    </div>
+                    <p>{message.content}</p>
+                  </div>
+                ))
+              )}
+            </div>
 
-        <form
-          className="composer"
-          onSubmit={(event) => {
-            event.preventDefault();
-            handleSend();
-          }}
-        >
-          <input
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            placeholder="Type your message..."
-            aria-label="Chat message"
-          />
-          <button type="submit" disabled={!input.trim() || isRunning}>
-            {isRunning ? 'Sending...' : 'Send'}
-          </button>
-        </form>
-      </main>
+            <form
+              className="composer"
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleSend();
+              }}
+            >
+              <input
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder="Type your message..."
+                aria-label="Chat message"
+              />
+              <button type="submit" disabled={!input.trim() || isRunning}>
+                {isRunning ? 'Sending...' : 'Send'}
+              </button>
+            </form>
+          </main>
+        </div>
+      </div>
     </div>
   );
 }

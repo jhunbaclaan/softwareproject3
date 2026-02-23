@@ -7,3 +7,4 @@ requests
 anthropic>=0.79.0
 mcp>=1.26.0
 google-genai
+langgraph

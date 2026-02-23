@@ -18,12 +18,18 @@ class AuthTokens(BaseModel):
     scope: str
 
 
+class ConversationMessage(BaseModel):
+    role: str  # "user" | "model"
+    content: str
+
+
 class AgentRequest(BaseModel):
     prompt: str
     keywords: List[str] = []
     loop: int = 1
     authTokens: Optional[AuthTokens] = None
     projectUrl: Optional[str] = None
+    messages: Optional[List[ConversationMessage]] = None
 
 
 class AgentResponse(BaseModel):

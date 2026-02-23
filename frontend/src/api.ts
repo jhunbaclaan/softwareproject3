@@ -9,12 +9,18 @@ export type AuthTokens = {
   scope: string;
 };
 
+export type ConversationMessage = {
+  role: 'user' | 'model';
+  content: string;
+};
+
 export type AgentRequest = {
   prompt: string;
   keywords: string[];
   loop: number;
   authTokens?: AuthTokens;
   projectUrl?: string;
+  messages?: ConversationMessage[];
 };
 
 export type AgentResponse = {

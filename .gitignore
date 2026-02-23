@@ -9,3 +9,5 @@ mcp-server/dist/
 mcp-server/package.json
 storage/
 /.ai/mcp/mcp.json
+/.cursor
+/.vscode

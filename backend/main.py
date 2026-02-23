@@ -1,14 +1,104 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import os
 import logging
 from agents.mcp_client_new import MCPClient
+from agents.graph import run_agent_graph
 from models import TraceItem, AgentRequest, AgentResponse
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+# ---------------------------------------------------------------------------
+# Persistent MCP client state
+# ---------------------------------------------------------------------------
+
+_client: MCPClient | None = None
+_client_project_url: str | None = None
+_client_lock = asyncio.Lock()
+
+
+def _get_mcp_server_path() -> str:
+    if path := os.getenv("MCP_SERVER_PATH"):
+        return path
+    backend_dir = os.path.dirname(__file__)
+    return os.path.join(backend_dir, "..", "mcp-server", "dist", "server.js")
+
+
+async def _ensure_client(request: AgentRequest) -> MCPClient:
+    """Return a ready-to-use MCPClient, reusing it across requests.
+
+    A new client is only created when:
+    - No client exists yet (first request).
+    - The project URL changed since the last initialisation.
+    - The previous client's session has become unusable.
+    """
+    global _client, _client_project_url
+
+    project_url = request.projectUrl if (request.authTokens and request.projectUrl) else None
+
+    async with _client_lock:
+        need_new = (
+            _client is None
+            or _client.session is None
+            or project_url != _client_project_url
+        )
+
+        if need_new:
+            if _client is not None:
+                try:
+                    await asyncio.wait_for(_client.cleanup(), timeout=5.0)
+                except Exception:
+                    logger.warning("Old MCP client cleanup failed; proceeding")
+                _client = None
+                _client_project_url = None
+
+            client = MCPClient()
+            await client.connect_to_server(_get_mcp_server_path())
+
+            if request.authTokens and request.projectUrl:
+                await client.initialize_session(
+                    access_token=request.authTokens.accessToken,
+                    expires_at=request.authTokens.expiresAt,
+                    client_id=request.authTokens.clientId,
+                    redirect_url=request.authTokens.redirectUrl,
+                    scope=request.authTokens.scope,
+                    project_url=request.projectUrl,
+                    refresh_token=request.authTokens.refreshToken,
+                )
+
+            _client = client
+            _client_project_url = project_url
+
+        return _client
+
+
+async def _shutdown_client():
+    """Cleanly tear down the persistent MCP client."""
+    global _client, _client_project_url
+    if _client is not None:
+        try:
+            await asyncio.wait_for(_client.cleanup(), timeout=5.0)
+        except (TimeoutError, asyncio.CancelledError):
+            logger.info("MCP client cleanup timed out on shutdown")
+        except Exception as exc:
+            logger.warning("MCP client cleanup error on shutdown: %s", exc)
+        _client = None
+        _client_project_url = None
+
+
+# ---------------------------------------------------------------------------
+# FastAPI app
+# ---------------------------------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    yield
+    await _shutdown_client()
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -18,72 +108,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
+
 @app.post("/agent/run")
 async def run_agent(request: AgentRequest) -> AgentResponse:
-    """
-    Process a user query through the Gemini + MCP agent.
-
-    Args:
-        request: AgentRequest with prompt, keywords, loop count, and optional auth tokens/project URL
-
-    Returns:
-        AgentResponse with the agent's reply and optional trace data
-    """
-    client = None
+    """Process a user query through the Gemini + MCP agent."""
     try:
-        # Get the MCP server script path from environment or use default
-        # Resolves to ../mcp-server/dist/server.js relative to this file's location
-        if mcp_server_path := os.getenv("MCP_SERVER_PATH"):
-            pass  # Use environment variable if set
-        else:
-            # Default path: go up from backend folder to root, then into mcp-server/dist
-            backend_dir = os.path.dirname(__file__)
-            mcp_server_path = os.path.join(backend_dir, "..", "mcp-server", "dist", "server.js")
+        client = await _ensure_client(request)
 
-        # Create and initialize the MCP client
-        client = MCPClient()
-        await client.connect_to_server(mcp_server_path)
+        history = None
+        if request.messages:
+            history = [{"role": m.role, "content": m.content} for m in request.messages]
 
-        # Initialize session if auth tokens and project URL are provided
-        if request.authTokens and request.projectUrl:
-            await client.initialize_session(
-                access_token=request.authTokens.accessToken,
-                expires_at=request.authTokens.expiresAt,
-                client_id=request.authTokens.clientId,
-                redirect_url=request.authTokens.redirectUrl,
-                scope=request.authTokens.scope,
-                project_url=request.projectUrl,
-                refresh_token=request.authTokens.refreshToken
-            )
-
-        # Process the user's query through Gemini with MCP tools
-        reply = await client.process_query(request.prompt)
-
+        reply = await run_agent_graph(client, request.prompt, history=history)
         return AgentResponse(reply=reply, trace=None)
 
     except Exception as e:
         error_msg = f"Agent error: {str(e)}"
         return AgentResponse(reply=error_msg, trace=None)
 
-    finally:
-        # Cleanup MUST happen in the same asyncio Task that called
-        # connect_to_server(), because the MCP library uses anyio cancel
-        # scopes that are bound to the Task they were entered in.
-        # Using BackgroundTasks or asyncio.wait_for would run cleanup in a
-        # different Task, causing "Attempted to exit cancel scope in a
-        # different task" RuntimeError.
-        if client is not None:
-            try:
-                async with asyncio.timeout(5.0):
-                    await client.cleanup()
-            except (TimeoutError, asyncio.CancelledError):
-                logger.info("MCP client cleanup timed out — resources released")
-            except Exception as e:
-                logger.warning("MCP client cleanup error: %s", e)
 
 if __name__ == "__main__":
     import uvicorn
