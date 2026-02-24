@@ -81,9 +81,9 @@ const extractAuthTokens = (clientId: string, redirectUrl: string, scope: string)
 
   const validRefreshToken =
     refreshToken &&
-    refreshToken !== 'undefined' &&
-    refreshToken !== 'null' &&
-    refreshToken.trim() !== ''
+      refreshToken !== 'undefined' &&
+      refreshToken !== 'null' &&
+      refreshToken.trim() !== ''
       ? refreshToken
       : undefined;
 
@@ -128,6 +128,185 @@ export default function App() {
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [createProjectError, setCreateProjectError] = useState<string | null>(null);
   const [connectedProjectName, setConnectedProjectName] = useState<string | null>(null);
+  const [settingsSidebarOpen, setSettingsSidebarOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.localStorage.getItem('darkMode') === 'true';
+    }
+    return false;
+  });
+  const [fontSize, setFontSize] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return parseFloat(window.localStorage.getItem('fontSize') || '14');
+    }
+    return 14;
+  });
+  const [tempFontSize, setTempFontSize] = useState(fontSize.toString());
+  const [reduceMotion, setReduceMotion] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.localStorage.getItem('reduceMotion') === 'true';
+    }
+    return false;
+  });
+  const [highContrast, setHighContrast] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.localStorage.getItem('highContrast') === 'true';
+    }
+    return false;
+  });
+  const [showTimestamps, setShowTimestamps] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.localStorage.getItem('showTimestamps') !== 'false';
+    }
+    return true;
+  });
+  const [autoScroll, setAutoScroll] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.localStorage.getItem('autoScroll') !== 'false';
+    }
+    return true;
+  });
+  const [theme, setTheme] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.localStorage.getItem('theme') || 'default';
+    }
+    return 'default';
+  });
+  const [customColor, setCustomColor] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.localStorage.getItem('customColor') || '#1b7f79';
+    }
+    return '#1b7f79';
+  });
+  const [useCustomColor, setUseCustomColor] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.localStorage.getItem('useCustomColor') === 'true';
+    }
+    return false;
+  });
+  const [messageDensity, setMessageDensity] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.localStorage.getItem('messageDensity') || 'comfortable';
+    }
+    return 'comfortable';
+  });
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setTempFontSize(fontSize.toString());
+  }, [fontSize]);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const root = document.documentElement;
+      if (darkMode) {
+        root.setAttribute('data-theme', 'dark');
+        window.localStorage.setItem('darkMode', 'true');
+      } else {
+        root.removeAttribute('data-theme');
+        window.localStorage.setItem('darkMode', 'false');
+      }
+    }
+  }, [darkMode]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      document.documentElement.style.fontSize = `${fontSize}px`;
+      window.localStorage.setItem('fontSize', fontSize.toString());
+    }
+  }, [fontSize]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const root = document.documentElement;
+      if (reduceMotion) {
+        root.setAttribute('data-reduce-motion', 'true');
+        window.localStorage.setItem('reduceMotion', 'true');
+      } else {
+        root.removeAttribute('data-reduce-motion');
+        window.localStorage.setItem('reduceMotion', 'false');
+      }
+    }
+  }, [reduceMotion]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const root = document.documentElement;
+      if (highContrast) {
+        root.setAttribute('data-high-contrast', 'true');
+        window.localStorage.setItem('highContrast', 'true');
+      } else {
+        root.removeAttribute('data-high-contrast');
+        window.localStorage.setItem('highContrast', 'false');
+      }
+    }
+  }, [highContrast]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const root = document.documentElement;
+      root.setAttribute('data-color-theme', theme);
+      window.localStorage.setItem('theme', theme);
+      // Disable custom color when theme changes
+      setUseCustomColor(false);
+    }
+  }, [theme]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('showTimestamps', showTimestamps.toString());
+    }
+  }, [showTimestamps]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('autoScroll', autoScroll.toString());
+    }
+  }, [autoScroll]);
+
+  useEffect(() => {
+    if (autoScroll && messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
+  }, [messages, autoScroll]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('customColor', customColor);
+      const root = document.documentElement;
+      if (useCustomColor) {
+        root.style.setProperty('--accent', customColor);
+        root.style.setProperty('--accent-hover', customColor + 'cc');
+      }
+    }
+  }, [customColor, useCustomColor]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('useCustomColor', useCustomColor.toString());
+      const root = document.documentElement;
+      if (!useCustomColor) {
+        // Remove inline styles to restore theme colors
+        root.style.removeProperty('--accent');
+        root.style.removeProperty('--accent-hover');
+      } else {
+        // Apply custom color if enabled
+        root.style.setProperty('--accent', customColor);
+        root.style.setProperty('--accent-hover', customColor + 'cc');
+      }
+    }
+  }, [useCustomColor]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('messageDensity', messageDensity);
+      const densityMap: Record<string, string> = {
+        compact: '8px',
+        comfortable: '12px',
+        spacious: '22px',
+      };
+      document.documentElement.style.setProperty('--message-gap', densityMap[messageDensity] || '12px');
+    }
+  }, [messageDensity]);
 
   const addMessage = (role: Role, content: string) => {
     setMessages((prev) => [
@@ -338,10 +517,10 @@ export default function App() {
     try {
       const authTokens = authStatus?.loggedIn
         ? extractAuthTokens(
-            authConfig.clientId.trim(),
-            authConfig.redirectUrl.trim(),
-            authConfig.scope.trim()
-          )
+          authConfig.clientId.trim(),
+          authConfig.redirectUrl.trim(),
+          authConfig.scope.trim()
+        )
         : null;
 
       const projectUrlToSend = projectStatus === 'connected' && projectUrl.trim()
@@ -543,13 +722,24 @@ export default function App() {
                   : 'Connect a project in the sidebar to get started.'}
               </p>
             </div>
-            <button type="button" className="ghost small" onClick={handleReset}>
-              Clear chat
-            </button>
+            <div className="header-actions">
+              <button type="button" className="ghost small" onClick={handleReset}>
+                Clear chat
+              </button>
+              <button
+                type="button"
+                className="cogwheel-btn"
+                onClick={() => setSettingsSidebarOpen(!settingsSidebarOpen)}
+                aria-label="Toggle settings"
+                title="Settings"
+              >
+                ⚙
+              </button>
+            </div>
           </header>
 
           <main className="chat-card">
-            <div className="messages">
+            <div className="messages" ref={messagesContainerRef}>
               {messages.length === 0 ? (
                 <div className="empty">
                   <p>Start the conversation by sending a message.</p>
@@ -559,7 +749,7 @@ export default function App() {
                   <div key={message.id} className={`message ${message.role}`}>
                     <div className="message-meta">
                       <span className="role">{message.role}</span>
-                      <span className="time">{message.timestamp}</span>
+                      {showTimestamps && <span className="time">{message.timestamp}</span>}
                     </div>
                     <p>{message.content}</p>
                   </div>
@@ -586,6 +776,233 @@ export default function App() {
             </form>
           </main>
         </div>
+
+        {settingsSidebarOpen && (
+          <aside className="settings-sidebar">
+            <div className="settings-header">
+              <h3>Settings</h3>
+              <button
+                type="button"
+                className="close-btn"
+                onClick={() => setSettingsSidebarOpen(false)}
+                aria-label="Close settings"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="settings-content">
+              <div className="settings-section">
+                <h4>Appearance</h4>
+                <div className="setting-item">
+                  <span className="setting-label">Dark Mode</span>
+                  <div
+                    className={`toggle-switch${darkMode ? ' active' : ''}`}
+                    onClick={() => setDarkMode(!darkMode)}
+                    role="switch"
+                    aria-checked={darkMode}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setDarkMode(!darkMode);
+                      }
+                    }}
+                  />
+                </div>
+                <div className="setting-item">
+                  <span className="setting-label">Theme</span>
+                  <select
+                    value={theme}
+                    onChange={(e) => setTheme(e.target.value)}
+                    className="theme-select"
+                    aria-label="Color theme"
+                  >
+                    <option value="default">Default</option>
+                    <option value="black-red">Redliner</option>
+                    <option value="ivory">Ivory</option>
+                  </select>
+                </div>
+                <div className="setting-item">
+                  <span className="setting-label">Custom Color</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div
+                      className={`toggle-switch${useCustomColor ? ' active' : ''}`}
+                      onClick={() => setUseCustomColor(!useCustomColor)}
+                      role="switch"
+                      aria-checked={useCustomColor}
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setUseCustomColor(!useCustomColor);
+                        }
+                      }}
+                    />
+                    <input
+                      type="color"
+                      value={customColor}
+                      onChange={(e) => setCustomColor(e.target.value)}
+                      className="color-picker-input"
+                      aria-label="Custom accent color"
+                      disabled={!useCustomColor}
+                      style={{ opacity: useCustomColor ? 1 : 0.5, cursor: useCustomColor ? 'pointer' : 'not-allowed' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h4>Accessibility</h4>
+                <div className="setting-item">
+                  <span className="setting-label">Reduce Motion</span>
+                  <div
+                    className={`toggle-switch${reduceMotion ? ' active' : ''}`}
+                    onClick={() => setReduceMotion(!reduceMotion)}
+                    role="switch"
+                    aria-checked={reduceMotion}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setReduceMotion(!reduceMotion);
+                      }
+                    }}
+                  />
+                </div>
+                <div className="setting-item">
+                  <span className="setting-label">High Contrast</span>
+                  <div
+                    className={`toggle-switch${highContrast ? ' active' : ''}`}
+                    onClick={() => setHighContrast(!highContrast)}
+                    role="switch"
+                    aria-checked={highContrast}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setHighContrast(!highContrast);
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h4>User Preferences</h4>
+                <div className="setting-item">
+                  <span className="setting-label">Show Timestamps</span>
+                  <div
+                    className={`toggle-switch${showTimestamps ? ' active' : ''}`}
+                    onClick={() => setShowTimestamps(!showTimestamps)}
+                    role="switch"
+                    aria-checked={showTimestamps}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setShowTimestamps(!showTimestamps);
+                      }
+                    }}
+                  />
+                </div>
+                <div className="setting-item">
+                  <span className="setting-label">Auto Scroll</span>
+                  <div
+                    className={`toggle-switch${autoScroll ? ' active' : ''}`}
+                    onClick={() => setAutoScroll(!autoScroll)}
+                    role="switch"
+                    aria-checked={autoScroll}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setAutoScroll(!autoScroll);
+                      }
+                    }}
+                  />
+                </div>
+                <div className="setting-item">
+                  <span className="setting-label">Message Spacing</span>
+                  <select
+                    value={messageDensity}
+                    onChange={(e) => setMessageDensity(e.target.value)}
+                    className="theme-select"
+                    aria-label="Message bubble density"
+                  >
+                    <option value="compact">Compact</option>
+                    <option value="comfortable">Comfortable</option>
+                    <option value="spacious">Spacious</option>
+                  </select>
+                </div>
+                <div className="setting-item">
+                  <span className="setting-label">Font Size</span>
+                  <div className="font-size-controls">
+                    <input
+                      type="number"
+                      min="8"
+                      max="30"
+                      value={tempFontSize}
+                      onChange={(e) => setTempFontSize(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const newSize = parseFloat(e.currentTarget.value) || 14;
+                          if (newSize >= 8 && newSize <= 30) {
+                            setFontSize(newSize);
+                          } else {
+                            setTempFontSize(fontSize.toString());
+                          }
+                        }
+                      }}
+                      onBlur={() => setTempFontSize(fontSize.toString())}
+                      className="font-size-input"
+                      aria-label="Font size in pixels"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setFontSize(14)}
+                      className="reset-btn"
+                      title="Reset to default (14px)"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h4>Developer Settings</h4>
+                <div className="setting-item">
+                  <span className="setting-label">DevSetting1</span>
+                  <div
+                    className="toggle-switch"
+                    role="switch"
+                    aria-checked="false"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                      }
+                    }}
+                  />
+                </div>
+                <div className="setting-item">
+                  <span className="setting-label">DevSetting2</span>
+                  <div
+                    className="toggle-switch"
+                    role="switch"
+                    aria-checked="false"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </aside>
+        )}
       </div>
     </div>
   );
