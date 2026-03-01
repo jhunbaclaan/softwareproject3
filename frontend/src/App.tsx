@@ -7,7 +7,7 @@ import {
   type SyncedDocument,
 } from '@audiotool/nexus';
 import './App.css';
-import { runAgent, type AuthTokens, type ConversationMessage } from './api';
+import { runAgent, type AuthTokens, type ConversationMessage, type LLMProvider } from './api';
 
 type Role = 'user' | 'assistant';
 
@@ -129,6 +129,10 @@ export default function App() {
   const [createProjectError, setCreateProjectError] = useState<string | null>(null);
   const [connectedProjectName, setConnectedProjectName] = useState<string | null>(null);
   const [settingsSidebarOpen, setSettingsSidebarOpen] = useState(false);
+  const [llmProvider, setLlmProvider] = useState<LLMProvider>(() =>
+    (loadSetting('llm.provider', 'gemini') as LLMProvider) || 'gemini'
+  );
+  const [llmApiKey, setLlmApiKey] = useState(() => loadSetting('llm.apiKey', ''));
   const [darkMode, setDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       return window.localStorage.getItem('darkMode') === 'true';
@@ -318,6 +322,13 @@ export default function App() {
   useEffect(() => {
     saveSetting('audiotool.projectUrl', projectUrl);
   }, [projectUrl]);
+
+  useEffect(() => {
+    saveSetting('llm.provider', llmProvider);
+  }, [llmProvider]);
+  useEffect(() => {
+    saveSetting('llm.apiKey', llmApiKey);
+  }, [llmApiKey]);
 
   useEffect(() => {
     return () => {
@@ -541,6 +552,8 @@ export default function App() {
         authTokens: authTokens || undefined,
         projectUrl: projectUrlToSend,
         messages: history.length > 0 ? history : undefined,
+        llmProvider,
+        llmApiKey: llmApiKey.trim() || undefined,
       });
       addMessage('assistant', response.reply);
     } catch (error) {
@@ -966,6 +979,34 @@ export default function App() {
                       Reset
                     </button>
                   </div>
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h4>LLM / Assistant</h4>
+                <div className="setting-item">
+                  <span className="setting-label">Provider</span>
+                  <select
+                    value={llmProvider}
+                    onChange={(e) => setLlmProvider(e.target.value as LLMProvider)}
+                    className="theme-select"
+                    aria-label="LLM provider"
+                  >
+                    <option value="gemini">Gemini (Google)</option>
+                    <option value="anthropic">Anthropic (Claude)</option>
+                  </select>
+                </div>
+                <div className="setting-item">
+                  <span className="setting-label">API Key (optional)</span>
+                  <input
+                    type="password"
+                    value={llmApiKey}
+                    onChange={(e) => setLlmApiKey(e.target.value)}
+                    placeholder={llmProvider === 'gemini' ? 'Uses GEMINI_API_KEY if empty' : 'Uses ANTHROPIC_API_KEY if empty'}
+                    className="font-size-input"
+                    aria-label="API key for LLM provider"
+                    autoComplete="off"
+                  />
                 </div>
               </div>
 

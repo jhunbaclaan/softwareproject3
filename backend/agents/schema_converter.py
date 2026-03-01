@@ -61,3 +61,13 @@ def convert_mcp_schema_to_gemini(schema: Dict[str, Any]) -> Dict[str, Any]:
             cleaned_schema[key] = value
 
     return cleaned_schema
+
+
+def convert_mcp_schema_to_anthropic(schema: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Convert an MCP tool inputSchema to Anthropic-compatible input_schema format.
+
+    Anthropic's tool input_schema accepts the same JSON Schema subset as Gemini
+    (type, properties, required, etc.), so we reuse the Gemini cleaner.
+    """
+    return convert_mcp_schema_to_gemini(schema)

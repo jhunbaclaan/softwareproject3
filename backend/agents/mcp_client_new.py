@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional, List
+from typing import Optional, List, Literal
 from contextlib import AsyncExitStack
 
 from mcp import ClientSession, StdioServerParameters
@@ -7,10 +7,11 @@ from mcp.client.stdio import stdio_client
 
 from google import genai
 from google.genai import types
+from anthropic import AsyncAnthropic
 from dotenv import load_dotenv
 import os
 
-from .schema_converter import convert_mcp_schema_to_gemini
+from .schema_converter import convert_mcp_schema_to_gemini, convert_mcp_schema_to_anthropic
 
 load_dotenv()
 
@@ -103,16 +104,44 @@ SYSTEM_INSTRUCTION = (
 )
 
 
+def _resolve_llm_api_key(provider: Literal["gemini", "anthropic"], api_key: Optional[str]) -> str:
+    if api_key and api_key.strip():
+        return api_key.strip()
+    if provider == "gemini":
+        key = os.getenv("GEMINI_API_KEY")
+        if not key:
+            raise ValueError("GEMINI_API_KEY environment variable is required (or set llmApiKey in the request)")
+        return key
+    else:
+        key = os.getenv("ANTHROPIC_API_KEY")
+        if not key:
+            raise ValueError("ANTHROPIC_API_KEY environment variable is required (or set llmApiKey in the request)")
+        return key
+
+
 class MCPClient:
-    def __init__(self):
+    def __init__(
+        self,
+        llm_provider: Literal["gemini", "anthropic"] = "gemini",
+        llm_api_key: Optional[str] = None,
+    ):
         self.session: Optional[ClientSession] = None
         self.exit_stack = AsyncExitStack()
         self._cached_tools: Optional[list] = None
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY environment variable is required")
-        self.client = genai.Client(api_key=api_key)
-        self.model_name = "gemini-2.5-flash"
+        self._cached_anthropic_tools: Optional[list] = None
+        self._llm_provider = llm_provider
+        self._llm_api_key = _resolve_llm_api_key(llm_provider, llm_api_key)
+
+        if llm_provider == "gemini":
+            self._gemini_client = genai.Client(api_key=self._llm_api_key)
+            self._gemini_model = "gemini-2.5-flash"
+            self._anthropic_client = None
+            self._anthropic_model = None
+        else:
+            self._gemini_client = None
+            self._gemini_model = None
+            self._anthropic_client = AsyncAnthropic(api_key=self._llm_api_key)
+            self._anthropic_model = "claude-sonnet-4-20250514"
 
     async def connect_to_server(self, server_script_path: str):
         """Connect to an MCP server
@@ -177,8 +206,12 @@ class MCPClient:
                 self.session.call_tool("initialize-session", tool_args),
                 timeout=30.0  # 30 second timeout
             )
+            if getattr(result, "isError", False):
+                msg = self._extract_tool_result(result)
+                print(f"[MCP Client] ERROR initializing session: {msg}")
+                raise Exception(msg)
             print("[MCP Client] Session initialized successfully!")
-            return str(result.content)
+            return self._extract_tool_result(result)
         except asyncio.TimeoutError:
             error_msg = "Session initialization timed out after 30 seconds. Check MCP server logs for details."
             print(f"[MCP Client] ERROR: {error_msg}")
@@ -220,6 +253,30 @@ class MCPClient:
         self._cached_tools = [types.Tool(function_declarations=function_declarations)] if function_declarations else None
         return self._cached_tools
 
+    async def _get_anthropic_tools(self) -> list:
+        """Fetch MCP tools and convert to Anthropic tool definitions (list of dicts)."""
+        if self._cached_anthropic_tools is not None:
+            return self._cached_anthropic_tools
+
+        if self.session is None:
+            raise RuntimeError("Not connected – call connect_to_server() first")
+
+        mcp_tools_response = await self.session.list_tools()
+        tools = []
+        for tool in mcp_tools_response.tools:
+            if tool.name in _EXCLUDED_TOOLS:
+                continue
+            cleaned_schema = convert_mcp_schema_to_anthropic(
+                dict(tool.inputSchema) if tool.inputSchema else {}
+            )
+            tools.append({
+                "name": tool.name,
+                "description": tool.description or "",
+                "input_schema": cleaned_schema,
+            })
+        self._cached_anthropic_tools = tools
+        return self._cached_anthropic_tools
+
     @staticmethod
     def _extract_tool_result(result) -> str:
         """Extract plain text from an MCP CallToolResult."""
@@ -238,8 +295,8 @@ class MCPClient:
 
         Returns (updated_contents, final_text_reply).
         """
-        response = await self.client.aio.models.generate_content(
-            model=self.model_name,
+        response = await self._gemini_client.aio.models.generate_content(
+            model=self._gemini_model,
             contents=contents,
             config=config,
         )
@@ -290,8 +347,8 @@ class MCPClient:
                     contents.append(candidate.content)
                     contents.append(types.Content(parts=fn_response_parts, role="user"))
 
-                    response = await self.client.aio.models.generate_content(
-                        model=self.model_name,
+                    response = await self._gemini_client.aio.models.generate_content(
+                        model=self._gemini_model,
                         contents=contents,
                         config=config,
                     )
@@ -310,6 +367,139 @@ class MCPClient:
             text = "No response generated."
         return contents, text
 
+    async def run_tool_loop_anthropic(
+        self,
+        messages: list,
+        system: str = SYSTEM_INSTRUCTION,
+        max_iterations: int = 10,
+    ) -> tuple[list, str]:
+        """Run the Anthropic Claude <-> MCP tool-calling loop.
+
+        messages: list of {"role": "user"|"assistant", "content": ...} in API format.
+        Returns (updated_messages, final_text_reply).
+        """
+        if self._anthropic_client is None or self.session is None:
+            raise RuntimeError("Anthropic client not configured or not connected")
+
+        tools = await self._get_anthropic_tools()
+        if not tools:
+            raise RuntimeError("No tools available for Anthropic")
+
+        final_text = ""
+        for _ in range(max_iterations):
+            response = await self._anthropic_client.messages.create(
+                model=self._anthropic_model,
+                max_tokens=4096,
+                system=system,
+                tools=tools,
+                messages=messages,
+            )
+
+            text_parts = []
+            tool_use_blocks = []
+
+            for block in response.content:
+                if block.type == "text":
+                    text_parts.append(block.text)
+                elif block.type == "tool_use":
+                    tool_use_blocks.append(block)
+
+            if text_parts:
+                final_text = "\n".join(text_parts)
+
+            if not tool_use_blocks:
+                break
+
+            # Append assistant message (with tool_use blocks)
+            assistant_content = [
+                {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
+                for b in tool_use_blocks
+            ]
+            messages.append({"role": "assistant", "content": assistant_content})
+
+            # Call MCP tools and build tool_result blocks
+            tool_results = []
+            for block in tool_use_blocks:
+                tool_name = block.name
+                tool_args = block.input if isinstance(block.input, dict) else {}
+                print(f"[MCP Client] Calling tool: {tool_name} with args: {tool_args}")
+                try:
+                    result = await self.session.call_tool(tool_name, tool_args)
+                    result_str = self._extract_tool_result(result)
+                except Exception as e:
+                    result_str = f"Error calling tool {tool_name}: {str(e)}"
+                    print(f"[MCP Client] Tool call FAILED: {result_str}")
+                print(f"[MCP Client] Tool result: {result_str[:200]}...")
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": result_str,
+                })
+
+            messages.append({"role": "user", "content": tool_results})
+
+        if not final_text and messages and isinstance(messages[-1].get("content"), list):
+            for c in messages[-1]["content"]:
+                if isinstance(c, dict) and c.get("type") == "tool_result":
+                    final_text = c.get("content", "")
+                    break
+        if not final_text:
+            final_text = "No response generated."
+        return messages, final_text
+
+    async def run_llm_tool_loop(
+        self,
+        messages: list[dict],
+        resolved_intent_hint: Optional[str] = None,
+    ) -> str:
+        """Provider-agnostic: run the appropriate LLM + MCP tool loop and return the reply.
+
+        messages: list of {"role": "user"|"model", "content": str} (conversation history).
+        resolved_intent_hint: optional hint from recommend-entity-for-style to prepend.
+        """
+        if self._llm_provider == "anthropic":
+            # Convert to Anthropic format: "model" -> "assistant", content as list of text blocks
+            api_messages = []
+            for m in messages:
+                role = "assistant" if m["role"] == "model" else "user"
+                content = m["content"]
+                api_messages.append({"role": role, "content": content})
+            if resolved_intent_hint:
+                api_messages.append({
+                    "role": "user",
+                    "content": (
+                        f"[system hint] The recommend-entity-for-style tool returned: "
+                        f"{resolved_intent_hint}. Use this recommendation when deciding which entity to add."
+                    ),
+                })
+            _, reply = await self.run_tool_loop_anthropic(api_messages, system=SYSTEM_INSTRUCTION)
+            return reply
+
+        # Gemini path
+        tools = await self._get_gemini_tools()
+        config = types.GenerateContentConfig(
+            tools=tools,
+            system_instruction=SYSTEM_INSTRUCTION,
+        )
+        contents = []
+        for msg in messages:
+            role = msg["role"] if msg["role"] in ("user", "model") else "user"
+            contents.append(
+                types.Content(parts=[types.Part.from_text(text=msg["content"])], role=role)
+            )
+        if resolved_intent_hint:
+            contents.append(
+                types.Content(
+                    parts=[types.Part.from_text(
+                        text=f"[system hint] The recommend-entity-for-style tool returned: "
+                        f"{resolved_intent_hint}. Use this recommendation when deciding which entity to add."
+                    )],
+                    role="user",
+                )
+            )
+        _, reply = await self.run_tool_loop(contents, config)
+        return reply
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -324,37 +514,15 @@ class MCPClient:
             query: The current user message.
             history: Prior turns as dicts with ``role`` ("user"|"model") and ``content``.
         """
-        tools = await self._get_gemini_tools()
-        config = types.GenerateContentConfig(
-            tools=tools,
-            system_instruction=SYSTEM_INSTRUCTION,
-        )
-
-        contents: list = []
-        if history:
-            for msg in history:
-                role = msg["role"] if msg["role"] in ("user", "model") else "user"
-                contents.append(
-                    types.Content(parts=[types.Part.from_text(text=msg["content"])], role=role)
-                )
-        contents.append(
-            types.Content(parts=[types.Part.from_text(text=query)], role="user")
-        )
-
-        _, reply = await self.run_tool_loop(contents, config)
-        return reply
+        messages = list(history) if history else []
+        messages.append({"role": "user", "content": query})
+        return await self.run_llm_tool_loop(messages)
 
     async def chat_loop(self):
         """Run an interactive chat loop (keeps conversation across turns)."""
         print("\nMCP Client Started!")
         print("Type your queries or 'quit' to exit.")
-
-        tools = await self._get_gemini_tools()
-        config = types.GenerateContentConfig(
-            tools=tools,
-            system_instruction=SYSTEM_INSTRUCTION,
-        )
-        contents: list = []
+        messages: list = []
 
         while True:
             try:
@@ -362,10 +530,9 @@ class MCPClient:
                 if query.lower() == "quit":
                     break
 
-                contents.append(
-                    types.Content(parts=[types.Part.from_text(text=query)], role="user")
-                )
-                contents, reply = await self.run_tool_loop(contents, config)
+                messages.append({"role": "user", "content": query})
+                reply = await self.run_llm_tool_loop(messages)
+                messages.append({"role": "model", "content": reply})
                 print("\n" + reply)
             except Exception as e:
                 print(f"\nError: {str(e)}")

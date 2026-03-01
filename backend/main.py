@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 _client: MCPClient | None = None
 _client_project_url: str | None = None
+_client_llm_provider: str = "gemini"
+_client_llm_api_key: str | None = None
 _client_lock = asyncio.Lock()
 
 
@@ -31,18 +33,22 @@ async def _ensure_client(request: AgentRequest) -> MCPClient:
 
     A new client is only created when:
     - No client exists yet (first request).
-    - The project URL changed since the last initialisation.
+    - The project URL, LLM provider, or LLM API key changed.
     - The previous client's session has become unusable.
     """
-    global _client, _client_project_url
+    global _client, _client_project_url, _client_llm_provider, _client_llm_api_key
 
     project_url = request.projectUrl if (request.authTokens and request.projectUrl) else None
+    llm_provider = request.llmProvider or "gemini"
+    llm_api_key = request.llmApiKey if (request.llmApiKey and request.llmApiKey.strip()) else None
 
     async with _client_lock:
         need_new = (
             _client is None
             or _client.session is None
             or project_url != _client_project_url
+            or llm_provider != _client_llm_provider
+            or llm_api_key != _client_llm_api_key
         )
 
         if need_new:
@@ -53,9 +59,13 @@ async def _ensure_client(request: AgentRequest) -> MCPClient:
                     logger.warning("Old MCP client cleanup failed; proceeding")
                 _client = None
                 _client_project_url = None
+                _client_llm_provider = "gemini"
+                _client_llm_api_key = None
 
-            client = MCPClient()
+            client = MCPClient(llm_provider=llm_provider, llm_api_key=llm_api_key)
             await client.connect_to_server(_get_mcp_server_path())
+            _client_llm_provider = llm_provider
+            _client_llm_api_key = llm_api_key
 
             if request.authTokens and request.projectUrl:
                 await client.initialize_session(
@@ -76,7 +86,7 @@ async def _ensure_client(request: AgentRequest) -> MCPClient:
 
 async def _shutdown_client():
     """Cleanly tear down the persistent MCP client."""
-    global _client, _client_project_url
+    global _client, _client_project_url, _client_llm_provider, _client_llm_api_key
     if _client is not None:
         try:
             await asyncio.wait_for(_client.cleanup(), timeout=5.0)
@@ -86,6 +96,8 @@ async def _shutdown_client():
             logger.warning("MCP client cleanup error on shutdown: %s", exc)
         _client = None
         _client_project_url = None
+        _client_llm_provider = "gemini"
+        _client_llm_api_key = None
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +128,7 @@ def health():
 
 @app.post("/agent/run")
 async def run_agent(request: AgentRequest) -> AgentResponse:
-    """Process a user query through the Gemini + MCP agent."""
+    """Process a user query through the LLM (Gemini or Anthropic) + MCP agent."""
     try:
         client = await _ensure_client(request)
 

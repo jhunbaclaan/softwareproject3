@@ -14,6 +14,8 @@ export type ConversationMessage = {
   content: string;
 };
 
+export type LLMProvider = 'gemini' | 'anthropic';
+
 export type AgentRequest = {
   prompt: string;
   keywords: string[];
@@ -21,6 +23,8 @@ export type AgentRequest = {
   authTokens?: AuthTokens;
   projectUrl?: string;
   messages?: ConversationMessage[];
+  llmProvider?: LLMProvider;
+  llmApiKey?: string;
 };
 
 export type AgentResponse = {

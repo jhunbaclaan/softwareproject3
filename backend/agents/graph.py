@@ -16,10 +16,9 @@ from __future__ import annotations
 import re
 from typing import Any, Optional, Sequence, TypedDict
 
-from google.genai import types
 from langgraph.graph import END, StateGraph
 
-from .mcp_client_new import MCPClient, SYSTEM_INSTRUCTION
+from .mcp_client_new import MCPClient
 
 
 # ---------------------------------------------------------------------------
@@ -74,36 +73,13 @@ async def resolve_synth_intent(state: AgentState) -> dict:
         return {"resolved_intent": None}
 
 
-async def run_gemini_tools(state: AgentState) -> dict:
-    """Run the Gemini + MCP tool-calling loop with full conversation context."""
+async def run_llm_tools(state: AgentState) -> dict:
+    """Run the LLM (Gemini or Anthropic) + MCP tool-calling loop with full conversation context."""
     client: MCPClient = state["mcp_client"]
     messages = list(state.get("messages") or [])
+    resolved_intent = state.get("resolved_intent")
 
-    tools = await client._get_gemini_tools()
-    config = types.GenerateContentConfig(
-        tools=tools,
-        system_instruction=SYSTEM_INSTRUCTION,
-    )
-
-    contents: list = []
-    for msg in messages:
-        role = msg["role"] if msg["role"] in ("user", "model") else "user"
-        contents.append(
-            types.Content(parts=[types.Part.from_text(text=msg["content"])], role=role)
-        )
-
-    if state.get("resolved_intent"):
-        hint = (
-            f"[system hint] The recommend-entity-for-style tool returned: "
-            f"{state['resolved_intent']}. Use this recommendation when deciding "
-            f"which entity to add."
-        )
-        contents.append(
-            types.Content(parts=[types.Part.from_text(text=hint)], role="user")
-        )
-
-    _, reply = await client.run_tool_loop(contents, config)
-
+    reply = await client.run_llm_tool_loop(messages, resolved_intent_hint=resolved_intent)
     messages.append({"role": "model", "content": reply})
     return {"messages": messages, "reply": reply}
 
@@ -117,7 +93,7 @@ def should_resolve_intent(state: AgentState) -> str:
     query = state.get("current_query", "")
     if STYLE_PATTERNS.search(query):
         return "resolve_synth_intent"
-    return "run_gemini_tools"
+    return "run_llm_tools"
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +106,7 @@ def _build_agent_graph():
 
     graph.add_node("add_user_turn", add_user_turn)
     graph.add_node("resolve_synth_intent", resolve_synth_intent)
-    graph.add_node("run_gemini_tools", run_gemini_tools)
+    graph.add_node("run_llm_tools", run_llm_tools)
 
     graph.set_entry_point("add_user_turn")
 
@@ -139,11 +115,11 @@ def _build_agent_graph():
         should_resolve_intent,
         {
             "resolve_synth_intent": "resolve_synth_intent",
-            "run_gemini_tools": "run_gemini_tools",
+            "run_llm_tools": "run_llm_tools",
         },
     )
-    graph.add_edge("resolve_synth_intent", "run_gemini_tools")
-    graph.add_edge("run_gemini_tools", END)
+    graph.add_edge("resolve_synth_intent", "run_llm_tools")
+    graph.add_edge("run_llm_tools", END)
 
     return graph.compile()
 

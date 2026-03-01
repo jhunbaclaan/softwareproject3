@@ -250,8 +250,18 @@ server.registerTool(
         ],
       };
     } catch (error) {
-      console.error("[initialize-session] ERROR:", error);
-      throw error;
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error("[initialize-session] ERROR:", errorMsg);
+      // Return error as tool result instead of throwing so the server stays alive
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Session initialization failed: ${errorMsg}`,
+          },
+        ],
+        isError: true,
+      };
     }
   },
 );

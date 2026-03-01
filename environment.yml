@@ -4,6 +4,6 @@ channels:
   - defaults
 dependencies:
   - python=3.11
-  - nodejs=20
+  - nodejs=22
   - pip
   - uv

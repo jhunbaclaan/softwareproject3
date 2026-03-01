@@ -1,0 +1,10 @@
+[2026-03-01T08:39:50.245Z] unhandledRejection: Promise.withResolvers is not a function
+TypeError: Promise.withResolvers is not a function
+    at getWasmDocumentState (file:///C:/Users/kkyou/OneDrive/Documents/CSCI4911/softwareproject3/mcp-server/node_modules/@audiotool/nexus/dist/index.js:1284:46)
+    at createWasmNexusValidator (file:///C:/Users/kkyou/OneDrive/Documents/CSCI4911/softwareproject3/mcp-server/node_modules/@audiotool/nexus/dist/index.js:1672:19)
+    at createOnlineDocument (file:///C:/Users/kkyou/OneDrive/Documents/CSCI4911/softwareproject3/mcp-server/node_modules/@audiotool/nexus/dist/index.js:3584:11)
+    at Object.createSyncedDocument (file:///C:/Users/kkyou/OneDrive/Documents/CSCI4911/softwareproject3/mcp-server/node_modules/@audiotool/nexus/dist/index.js:3620:20)
+    at file:///C:/Users/kkyou/OneDrive/Documents/CSCI4911/softwareproject3/mcp-server/dist/server.js:174:42
+    at async McpServer.executeToolHandler (file:///C:/Users/kkyou/OneDrive/Documents/CSCI4911/softwareproject3/mcp-server/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js:233:20)
+    at async file:///C:/Users/kkyou/OneDrive/Documents/CSCI4911/softwareproject3/mcp-server/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js:126:32
+    at async wrappedHandler (file:///C:/Users/kkyou/OneDrive/Documents/CSCI4911/softwareproject3/mcp-server/node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js:125:32)

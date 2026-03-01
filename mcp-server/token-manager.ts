@@ -33,36 +33,31 @@ export class TokenManager {
      * Returns a valid access token, refreshing it if necessary.
      * This method matches the signature expected by createAudiotoolClient.
      */
-    async getToken(): Promise<string | Error> {
-        try {
+    async getToken(): Promise<string> {
             // Check if token is expired or about to expire
             const isExpired = Date.now() >= this.expiresAt - TOKEN_EXPIRY_BUFFER_MS;
 
-            if (!isExpired) {
-                return this.accessToken;
-            }
-
-            // If no refresh token, cannot refresh
-            if (!this.refreshToken) {
-                return new Error("Token expired and no refresh token available");
-            }
-
-            // Prevent multiple simultaneous refresh attempts
-            if (this.refreshPromise) {
-                await this.refreshPromise;
-                return this.accessToken;
-            }
-
-            // Start refresh process
-            this.refreshPromise = this.refreshAccessToken();
-            await this.refreshPromise;
-            this.refreshPromise = undefined;
-
+        if (!isExpired) {
             return this.accessToken;
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            return new Error(`Token refresh failed: ${message}`);
         }
+
+        // If no refresh token, cannot refresh
+        if (!this.refreshToken) {
+            throw new Error("Token expired and no refresh token available");
+        }
+
+        // Prevent multiple simultaneous refresh attempts
+        if (this.refreshPromise) {
+            await this.refreshPromise;
+            return this.accessToken;
+        }
+
+        // Start refresh process
+        this.refreshPromise = this.refreshAccessToken();
+        await this.refreshPromise;
+        this.refreshPromise = undefined;
+
+        return this.accessToken;
     }
 
     /**

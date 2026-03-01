@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 
 
 class TraceItem(BaseModel):
@@ -30,6 +30,8 @@ class AgentRequest(BaseModel):
     authTokens: Optional[AuthTokens] = None
     projectUrl: Optional[str] = None
     messages: Optional[List[ConversationMessage]] = None
+    llmProvider: Literal["gemini", "anthropic"] = "gemini"
+    llmApiKey: Optional[str] = None
 
 
 class AgentResponse(BaseModel):
