@@ -1,4 +1,5 @@
 import asyncio
+import json
 from typing import Optional, List, Literal
 from contextlib import AsyncExitStack
 
@@ -8,10 +9,15 @@ from mcp.client.stdio import stdio_client
 from google import genai
 from google.genai import types
 from anthropic import AsyncAnthropic
+from openai import AsyncOpenAI
 from dotenv import load_dotenv
 import os
 
-from .schema_converter import convert_mcp_schema_to_gemini, convert_mcp_schema_to_anthropic
+from .schema_converter import (
+    convert_mcp_schema_to_gemini,
+    convert_mcp_schema_to_anthropic,
+    convert_mcp_schema_to_openai,
+)
 
 load_dotenv()
 
@@ -104,31 +110,45 @@ SYSTEM_INSTRUCTION = (
 )
 
 
-def _resolve_llm_api_key(provider: Literal["gemini", "anthropic"], api_key: Optional[str]) -> str:
+def _resolve_llm_api_key(
+    provider: Literal["gemini", "anthropic", "openai"], api_key: Optional[str]
+) -> str:
     if api_key and api_key.strip():
         return api_key.strip()
     if provider == "gemini":
         key = os.getenv("GEMINI_API_KEY")
         if not key:
-            raise ValueError("GEMINI_API_KEY environment variable is required (or set llmApiKey in the request)")
+            raise ValueError(
+                "GEMINI_API_KEY environment variable is required (or set llmApiKey in the request)"
+            )
         return key
-    else:
+    if provider == "anthropic":
         key = os.getenv("ANTHROPIC_API_KEY")
         if not key:
-            raise ValueError("ANTHROPIC_API_KEY environment variable is required (or set llmApiKey in the request)")
+            raise ValueError(
+                "ANTHROPIC_API_KEY environment variable is required (or set llmApiKey in the request)"
+            )
         return key
+    # openai
+    key = os.getenv("OPENAI_API_KEY")
+    if not key:
+        raise ValueError(
+            "OPENAI_API_KEY environment variable is required (or set llmApiKey in the request)"
+        )
+    return key
 
 
 class MCPClient:
     def __init__(
         self,
-        llm_provider: Literal["gemini", "anthropic"] = "gemini",
+        llm_provider: Literal["gemini", "anthropic", "openai"] = "gemini",
         llm_api_key: Optional[str] = None,
     ):
         self.session: Optional[ClientSession] = None
         self.exit_stack = AsyncExitStack()
         self._cached_tools: Optional[list] = None
         self._cached_anthropic_tools: Optional[list] = None
+        self._cached_openai_tools: Optional[list] = None
         self._llm_provider = llm_provider
         self._llm_api_key = _resolve_llm_api_key(llm_provider, llm_api_key)
 
@@ -137,11 +157,22 @@ class MCPClient:
             self._gemini_model = "gemini-2.5-flash"
             self._anthropic_client = None
             self._anthropic_model = None
-        else:
+            self._openai_client = None
+            self._openai_model = None
+        elif llm_provider == "anthropic":
             self._gemini_client = None
             self._gemini_model = None
             self._anthropic_client = AsyncAnthropic(api_key=self._llm_api_key)
             self._anthropic_model = "claude-sonnet-4-20250514"
+            self._openai_client = None
+            self._openai_model = None
+        else:
+            self._gemini_client = None
+            self._gemini_model = None
+            self._anthropic_client = None
+            self._anthropic_model = None
+            self._openai_client = AsyncOpenAI(api_key=self._llm_api_key)
+            self._openai_model = "gpt-4o"
 
     async def connect_to_server(self, server_script_path: str):
         """Connect to an MCP server
@@ -276,6 +307,33 @@ class MCPClient:
             })
         self._cached_anthropic_tools = tools
         return self._cached_anthropic_tools
+
+    async def _get_openai_tools(self) -> list:
+        """Fetch MCP tools and convert to OpenAI function-calling tools (list of dicts)."""
+        if self._cached_openai_tools is not None:
+            return self._cached_openai_tools
+
+        if self.session is None:
+            raise RuntimeError("Not connected – call connect_to_server() first")
+
+        mcp_tools_response = await self.session.list_tools()
+        tools = []
+        for tool in mcp_tools_response.tools:
+            if tool.name in _EXCLUDED_TOOLS:
+                continue
+            cleaned_schema = convert_mcp_schema_to_openai(
+                dict(tool.inputSchema) if tool.inputSchema else {}
+            )
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description or "",
+                    "parameters": cleaned_schema,
+                },
+            })
+        self._cached_openai_tools = tools
+        return self._cached_openai_tools
 
     @staticmethod
     def _extract_tool_result(result) -> str:
@@ -447,6 +505,84 @@ class MCPClient:
             final_text = "No response generated."
         return messages, final_text
 
+    async def run_tool_loop_openai(
+        self,
+        messages: list[dict],
+        system: str = SYSTEM_INSTRUCTION,
+        max_iterations: int = 10,
+    ) -> tuple[list[dict], str]:
+        """Run the OpenAI chat completions <-> MCP tool-calling loop.
+
+        messages: list of {"role": "user"|"assistant"|"system", "content": str} in API format.
+        Returns (updated_messages, final_text_reply).
+        """
+        if self._openai_client is None or self.session is None:
+            raise RuntimeError("OpenAI client not configured or not connected")
+
+        tools = await self._get_openai_tools()
+        if not tools:
+            raise RuntimeError("No tools available for OpenAI")
+
+        # Build request messages with system first
+        request_messages = [{"role": "system", "content": system}]
+        request_messages.extend(messages)
+
+        final_text = ""
+        for _ in range(max_iterations):
+            response = await self._openai_client.chat.completions.create(
+                model=self._openai_model,
+                messages=request_messages,
+                tools=tools,
+            )
+            choice = response.choices[0] if response.choices else None
+            if not choice or not choice.message:
+                break
+
+            msg = choice.message
+            if msg.content:
+                final_text = (msg.content or "").strip()
+
+            if not (getattr(msg, "tool_calls", None)):
+                break
+
+            # Append assistant message (with tool_calls)
+            assistant_msg = {"role": "assistant", "content": msg.content or ""}
+            assistant_msg["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                }
+                for tc in msg.tool_calls
+            ]
+            request_messages.append(assistant_msg)
+
+            # Call MCP tools and append tool result messages
+            for tc in msg.tool_calls:
+                tool_name = tc.function.name
+                try:
+                    raw_args = tc.function.arguments or "{}"
+                    tool_args = json.loads(raw_args)
+                except json.JSONDecodeError:
+                    tool_args = {}
+                print(f"[MCP Client] Calling tool: {tool_name} with args: {tool_args}")
+                try:
+                    result = await self.session.call_tool(tool_name, tool_args)
+                    result_str = self._extract_tool_result(result)
+                except Exception as e:
+                    result_str = f"Error calling tool {tool_name}: {str(e)}"
+                    print(f"[MCP Client] Tool call FAILED: {result_str}")
+                print(f"[MCP Client] Tool result: {result_str[:200]}...")
+                request_messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": result_str,
+                })
+
+        if not final_text:
+            final_text = "No response generated."
+        return request_messages, final_text
+
     async def run_llm_tool_loop(
         self,
         messages: list[dict],
@@ -473,6 +609,23 @@ class MCPClient:
                     ),
                 })
             _, reply = await self.run_tool_loop_anthropic(api_messages, system=SYSTEM_INSTRUCTION)
+            return reply
+
+        if self._llm_provider == "openai":
+            # Convert to OpenAI format: "model" -> "assistant"
+            api_messages = []
+            for m in messages:
+                role = "assistant" if m["role"] == "model" else "user"
+                api_messages.append({"role": role, "content": m["content"]})
+            if resolved_intent_hint:
+                api_messages.append({
+                    "role": "user",
+                    "content": (
+                        f"[system hint] The recommend-entity-for-style tool returned: "
+                        f"{resolved_intent_hint}. Use this recommendation when deciding which entity to add."
+                    ),
+                })
+            _, reply = await self.run_tool_loop_openai(api_messages, system=SYSTEM_INSTRUCTION)
             return reply
 
         # Gemini path

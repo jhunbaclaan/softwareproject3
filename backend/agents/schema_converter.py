@@ -71,3 +71,13 @@ def convert_mcp_schema_to_anthropic(schema: Dict[str, Any]) -> Dict[str, Any]:
     (type, properties, required, etc.), so we reuse the Gemini cleaner.
     """
     return convert_mcp_schema_to_gemini(schema)
+
+
+def convert_mcp_schema_to_openai(schema: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Convert an MCP tool inputSchema to OpenAI function-calling parameters format.
+
+    OpenAI's function calling uses the same JSON Schema subset (type, properties,
+    required, etc.), so we reuse the Gemini cleaner.
+    """
+    return convert_mcp_schema_to_gemini(schema)

@@ -994,6 +994,7 @@ export default function App() {
                   >
                     <option value="gemini">Gemini (Google)</option>
                     <option value="anthropic">Anthropic (Claude)</option>
+                    <option value="openai">OpenAI (GPT)</option>
                   </select>
                 </div>
                 <div className="setting-item">
@@ -1002,7 +1003,13 @@ export default function App() {
                     type="password"
                     value={llmApiKey}
                     onChange={(e) => setLlmApiKey(e.target.value)}
-                    placeholder={llmProvider === 'gemini' ? 'Uses GEMINI_API_KEY if empty' : 'Uses ANTHROPIC_API_KEY if empty'}
+                    placeholder={
+                      llmProvider === 'gemini'
+                        ? 'Uses GEMINI_API_KEY if empty'
+                        : llmProvider === 'anthropic'
+                          ? 'Uses ANTHROPIC_API_KEY if empty'
+                          : 'Uses OPENAI_API_KEY if empty'
+                    }
                     className="font-size-input"
                     aria-label="API key for LLM provider"
                     autoComplete="off"

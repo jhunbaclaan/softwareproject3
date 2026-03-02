@@ -14,7 +14,7 @@ export type ConversationMessage = {
   content: string;
 };
 
-export type LLMProvider = 'gemini' | 'anthropic';
+export type LLMProvider = 'gemini' | 'anthropic' | 'openai';
 
 export type AgentRequest = {
   prompt: string;

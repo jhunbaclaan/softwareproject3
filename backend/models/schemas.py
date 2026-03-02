@@ -30,7 +30,7 @@ class AgentRequest(BaseModel):
     authTokens: Optional[AuthTokens] = None
     projectUrl: Optional[str] = None
     messages: Optional[List[ConversationMessage]] = None
-    llmProvider: Literal["gemini", "anthropic"] = "gemini"
+    llmProvider: Literal["gemini", "anthropic", "openai"] = "gemini"
     llmApiKey: Optional[str] = None
 
 
