@@ -108,7 +108,8 @@ SYSTEM_INSTRUCTION = (
     "When the user provides music in ABC notation (e.g. X:1, K:C, L:1/4, CDEF GABc|), "
     "call add-abc-track with the abcNotation parameter containing the full ABC string (without markdown). "
     "Extract the raw ABC from code blocks or plain text. Common headers: X:1 (tune number), K:key, L:default note length, "
-    "M:meter. This adds a Heisenberg synth and a note track to the DAW.\n\n"
+    "M:meter. Use the instrument parameter when the user specifies which instrument to play the notes "
+    "(e.g. bassline for bass, space for sampler, heisenberg for synth). Default is heisenberg.\n\n"
 
     "GENERAL:\n"
     "Always call the tool immediately when you have enough information; "

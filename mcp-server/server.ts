@@ -40,6 +40,47 @@ const ENTITY_TYPE_ALIASES: Record<string, string> = {
   drummachine: "machiniste",
 };
 
+/** Instruments that can play note tracks (NoteTrackPlayer). Used for add-abc-track. */
+const NOTE_TRACK_INSTRUMENTS = [
+  "heisenberg",
+  "bassline",
+  "space",
+  "gakki",
+  "pulverisateur",
+  "tonematrix",
+  "machiniste",
+  "matrixArpeggiator",
+] as const;
+
+const INSTRUMENT_ALIASES: Record<string, string> = {
+  synth: "heisenberg",
+  "poly synth": "heisenberg",
+  pad: "heisenberg",
+  lead: "heisenberg",
+  bass: "bassline",
+  "bass synth": "bassline",
+  acid: "bassline",
+  sampler: "space",
+  rompler: "space",
+  strings: "gakki",
+  "string synth": "gakki",
+  drums: "machiniste",
+  "drum machine": "machiniste",
+  sequencer: "tonematrix",
+  "step sequencer": "tonematrix",
+  arpeggiator: "matrixArpeggiator",
+  matrix: "matrixArpeggiator",
+  // Gakki has French horn and other orchestral sounds
+  "french horn": "gakki",
+  horn: "gakki",
+  trumpet: "gakki",
+  trombone: "gakki",
+  brass: "gakki",
+  woodwind: "heisenberg",
+  flute: "heisenberg",
+  oboe: "heisenberg",
+};
+
 /** Audiotool ticks: 1 whole note = 15360, 1 quarter = 3840 */
 const TICKS_WHOLE = 15360;
 const TICKS_QUARTER = 3840;
@@ -131,6 +172,98 @@ function resolveEntityType(input: string): string | null {
     }
   }
   return bestDist <= 3 ? best : null;
+}
+
+/**
+ * Resolve user-supplied instrument name to a valid NoteTrackPlayer type.
+ * Uses aliases and fuzzy matching.
+ */
+function resolveInstrumentType(input: string): string | null {
+  const trimmed = input.trim().toLowerCase();
+  if (NOTE_TRACK_INSTRUMENTS.includes(trimmed as any)) return trimmed;
+  if (INSTRUMENT_ALIASES[trimmed]) return INSTRUMENT_ALIASES[trimmed];
+  const ciMatch = NOTE_TRACK_INSTRUMENTS.find((t) => t.toLowerCase() === trimmed);
+  if (ciMatch) return ciMatch;
+  let best: string | null = null;
+  let bestDist = Infinity;
+  for (const t of NOTE_TRACK_INSTRUMENTS) {
+    const d = levenshtein(trimmed, t.toLowerCase());
+    if (d < bestDist) {
+      bestDist = d;
+      best = t;
+    }
+  }
+  return bestDist <= 3 ? best : null;
+}
+
+/** Entity types that produce audio and their output field name (for DesktopAudioCable fromSocket). */
+const AUDIO_OUTPUT_FIELD: Record<string, string> = {
+  heisenberg: "audioOutput",
+  bassline: "audioOutput",
+  machiniste: "mainOutput",
+  tonematrix: "audioOutput",
+  stompboxDelay: "audioOutput",
+  space: "audioOutput",
+  gakki: "audioOutput",
+  pulverisateur: "audioOutput",
+  matrixArpeggiator: "audioOutput",
+};
+
+/**
+ * Connect an audio device to the stagebox (mixer) by creating a DesktopAudioCable
+ * from the device's output to a new MixerChannel's input.
+ * Always creates a new MixerChannel so each device gets its own channel (a channel
+ * input can only accept one cable).
+ * Uses unique orderAmongStrips and displayName to avoid "multiple pointers" validation errors.
+ */
+function connectDeviceToStagebox(t: any, device: any, entityType: string): void {
+  const outputFieldName = AUDIO_OUTPUT_FIELD[entityType];
+  if (!outputFieldName) return;
+
+  const outputField = (device.fields as any)[outputFieldName];
+  if (!outputField?.location) return;
+
+  // orderAmongStrips must be globally unique across all mixer strips
+  const stripTypes = ["mixerChannel", "mixerGroup", "mixerAux", "mixerReverbAux", "mixerDelayAux"];
+  const existingStrips = stripTypes.flatMap((type) =>
+    t.entities.ofTypes(type as any).get()
+  );
+  const maxOrder = existingStrips.reduce((max: number, s: any) => {
+    const dp = (s.fields as any).displayParameters;
+    const order = dp?.fields?.orderAmongStrips?.value ?? 0;
+    return Math.max(max, order);
+  }, -1);
+  const nextOrder = maxOrder + 1;
+
+  const deviceDisplayName = (device.fields as any).displayName?.value ?? "";
+  const channelLabel = deviceDisplayName || `${entityType} ${nextOrder}`;
+
+  const mixerChannel = t.create("mixerChannel" as any, {});
+  if (!mixerChannel) return;
+
+  const displayParams = (mixerChannel.fields as any).displayParameters;
+  if (displayParams?.fields) {
+    t.update(displayParams.fields.orderAmongStrips, nextOrder);
+    t.update(displayParams.fields.displayName, channelLabel);
+  }
+
+  const inputLocation = (mixerChannel.fields as any).audioInput?.location;
+  if (!inputLocation) return;
+
+  t.create("desktopAudioCable" as any, {
+    fromSocket: outputField.location,
+    toSocket: inputLocation,
+  });
+}
+
+// helper function to set the gain of Heisenberg's Operator A
+// operatorA is a NexusObject; its nested fields (e.g. gain) are at operatorA.fields
+function setHeisenbergOperatorAGain(t: any, heisenberg: any, gain: number): void {
+  const operatorA = (heisenberg.fields as any).operatorA;
+  const gainField = operatorA?.fields?.gain;
+  if (gainField) {
+    t.update(gainField, gain);
+  }
 }
 
 // helper for authenticated client
@@ -441,6 +574,8 @@ server.registerTool(
             ...(properties || {}),
             positionX: posX,
             positionY: posY,
+            gain: 0.5,
+            displayName: (properties?.displayName as string) ?? `${resolvedType} ${autoLayoutOffset}`,
           };
 
           const newEntity = t.create(resolvedType as any, entityProperties);
@@ -449,6 +584,11 @@ server.registerTool(
             return {
               error: `Failed to create entity: t.create returned undefined`,
             };
+          }
+
+          connectDeviceToStagebox(t, newEntity, resolvedType);
+          if (resolvedType === "heisenberg") {
+            setHeisenbergOperatorAGain(t, newEntity, 0.5);
           }
 
           return { entity: newEntity };
@@ -504,26 +644,35 @@ server.registerTool(
   {
     description: [
       "Add a note track to the Audiotool DAW from ABC notation.",
-      "Parses the ABC string, creates a Heisenberg synth (or uses an existing note-playing device),",
+      "Parses the ABC string, creates an instrument (or uses an existing note-playing device),",
       "creates a NoteTrack, NoteCollection, NoteRegion, and adds all notes. Call this when the user",
       "provides music in ABC notation (e.g. X:1, K:C, L:1/4, CDEF GABc|).",
+      "Instruments: heisenberg (poly synth), bassline (bass), space (sampler), gakki (strings, french horn, brass),",
+      "pulverisateur, tonematrix, machiniste (drums), matrixArpeggiator.",
     ].join(" "),
     inputSchema: z.object({
       abcNotation: z
         .string()
         .describe("ABC notation string (e.g. X:1\\nK:C\\nL:1/4\\nCDEF GABc|)"),
+      instrument: z
+        .string()
+        .optional()
+        .describe(
+          "Instrument to play the notes. One of: heisenberg, bassline, space, gakki, pulverisateur, tonematrix, machiniste, matrixArpeggiator. Aliases: synth, bass, sampler, strings, drums, french horn, trumpet, brass. Default: heisenberg.",
+        ),
       playerEntityId: z
         .string()
         .optional()
         .describe(
-          "ID of existing Heisenberg/Bassline/Space/etc. to use. If omitted, a new Heisenberg is created.",
+          "ID of existing instrument to use. If omitted, a new instrument is created based on the instrument parameter.",
         ),
-      x: z.number().optional().describe("X position for new Heisenberg (if created)"),
-      y: z.number().optional().describe("Y position for new Heisenberg (if created)"),
+      x: z.number().optional().describe("X position for new instrument (if created)"),
+      y: z.number().optional().describe("Y position for new instrument (if created)"),
     }),
   },
   async (args: {
     abcNotation: string;
+    instrument?: string;
     playerEntityId?: string;
     x?: number;
     y?: number;
@@ -535,6 +684,9 @@ server.registerTool(
       }
 
       const doc = await getDocument();
+
+      const instrumentType =
+        resolveInstrumentType(args.instrument ?? "heisenberg") ?? "heisenberg";
 
       const result = await doc.modify((t) => {
         try {
@@ -549,18 +701,33 @@ server.registerTool(
             const posX = args.x ?? autoLayoutOffset * 120;
             const posY = args.y ?? 0;
             autoLayoutOffset++;
-            const heisenberg = t.create("heisenberg" as any, {
+            const player = t.create(instrumentType as any, {
               positionX: posX,
               positionY: posY,
+              displayName: `${instrumentType} ${autoLayoutOffset}`,
             });
-            if (!heisenberg) {
-              return { error: "Failed to create Heisenberg synth" };
+            if (!player) {
+              return {
+                error: `Failed to create ${instrumentType} instrument`,
+              };
             }
-            playerLocation = heisenberg as any;
+            connectDeviceToStagebox(t, player, instrumentType);
+            if (instrumentType === "heisenberg") {
+              setHeisenbergOperatorAGain(t, player, 0.5);
+            }
+            playerLocation = player as any;
           }
 
+          const existingTracks = t.entities
+            .ofTypes("noteTrack" as any, "audioTrack" as any, "automationTrack" as any, "patternTrack" as any)
+            .get();
+          const maxTrackOrder = existingTracks.reduce((max: number, tr: any) => {
+            const order = (tr.fields as any).orderAmongTracks?.value ?? 0;
+            return Math.max(max, order);
+          }, -1);
+
           const noteTrack = t.create("noteTrack" as any, {
-            orderAmongTracks: 0,
+            orderAmongTracks: maxTrackOrder + 1,
             player: playerLocation.location,
           });
           if (!noteTrack) {
