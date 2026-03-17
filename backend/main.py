@@ -7,6 +7,7 @@ import logging
 from agents.mcp_client_new import MCPClient
 from agents.graph import run_agent_graph
 from models import TraceItem, AgentRequest, AgentResponse
+from routes.music import router as music_router
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +120,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(music_router)
 
 
 @app.get("/health")

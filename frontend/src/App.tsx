@@ -7,7 +7,7 @@ import {
   type SyncedDocument,
 } from '@audiotool/nexus';
 import './App.css';
-import { runAgent, type AuthTokens, type ConversationMessage, type LLMProvider } from './api';
+import { runAgent, generateMusic, type AuthTokens, type ConversationMessage, type LLMProvider } from './api';
 
 type Role = 'user' | 'assistant';
 
@@ -102,6 +102,11 @@ export default function App() {
   const [input, setInput] = useState('');
   const [abcInput, setAbcInput] = useState('');
   const [abcExpanded, setAbcExpanded] = useState(false);
+  const [musicExpanded, setMusicExpanded] = useState(false);
+  const [musicPrompt, setMusicPrompt] = useState('');
+  const [musicGenerating, setMusicGenerating] = useState(false);
+  const [musicAudioUrl, setMusicAudioUrl] = useState<string | null>(null);
+  const [musicError, setMusicError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const authConfig = {
     clientId: envClientId ?? '',
@@ -576,6 +581,36 @@ export default function App() {
     setMessages([]);
   };
 
+  const handleGenerateMusic = async () => {
+    const trimmed = musicPrompt.trim();
+    if (!trimmed || musicGenerating) return;
+
+    setMusicGenerating(true);
+    setMusicError(null);
+    if (musicAudioUrl) {
+      URL.revokeObjectURL(musicAudioUrl);
+      setMusicAudioUrl(null);
+    }
+
+    try {
+      const result = await generateMusic('http://127.0.0.1:8000', {
+        prompt: trimmed,
+        music_length_ms: 15000,
+        force_instrumental: false,
+      });
+      const blob = new Blob(
+        [Uint8Array.from(atob(result.audio_base64), (c) => c.charCodeAt(0))],
+        { type: 'audio/mpeg' }
+      );
+      const url = URL.createObjectURL(blob);
+      setMusicAudioUrl(url);
+    } catch (err) {
+      setMusicError(formatError(err));
+    } finally {
+      setMusicGenerating(false);
+    }
+  };
+
   const authPillClass = `status-pill ${authStatus?.loggedIn ? 'ok' : 'warn'}`;
   const projectPillClass = `status-pill ${projectStatus === 'connected' ? 'ok' : 'warn'}`;
   const projectLabel =
@@ -804,6 +839,44 @@ export default function App() {
                     rows={5}
                     aria-label="ABC notation"
                   />
+                )}
+              </div>
+              <div className="abc-input-section">
+                <button
+                  type="button"
+                  className="abc-toggle"
+                  onClick={() => setMusicExpanded(!musicExpanded)}
+                  aria-expanded={musicExpanded}
+                  aria-label={musicExpanded ? 'Collapse music generation' : 'Expand music generation'}
+                >
+                  {musicExpanded ? '−' : '+'} Generate music (ElevenLabs)
+                </button>
+                {musicExpanded && (
+                  <div className="music-generate-section">
+                    <textarea
+                      value={musicPrompt}
+                      onChange={(e) => setMusicPrompt(e.target.value)}
+                      placeholder="e.g. Upbeat jazz with piano and drums, 120 BPM"
+                      className="abc-textarea"
+                      rows={2}
+                      aria-label="Music generation prompt"
+                      disabled={musicGenerating}
+                    />
+                    <button
+                      type="button"
+                      className="ghost small"
+                      onClick={handleGenerateMusic}
+                      disabled={!musicPrompt.trim() || musicGenerating}
+                    >
+                      {musicGenerating ? 'Generating...' : 'Generate'}
+                    </button>
+                    {musicError && <p className="music-error">{musicError}</p>}
+                    {musicAudioUrl && (
+                      <div className="music-player">
+                        <audio controls src={musicAudioUrl} />
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
               <input

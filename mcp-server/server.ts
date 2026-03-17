@@ -1,4 +1,7 @@
 // required imports
+import { readFileSync } from "fs";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -9,6 +12,18 @@ import {
   SyncedDocument,
 } from "@audiotool/nexus";
 import { TokenManager } from "./token-manager.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/** Gakki preset UUIDs by GM instrument name (lowercase, underscores). Loaded from gakki-instruments.json. */
+let gakkiByGmName: Record<string, string> = {};
+try {
+  const gakkiPath = join(__dirname, "..", "gakki-instruments.json");
+  const data = JSON.parse(readFileSync(gakkiPath, "utf-8"));
+  gakkiByGmName = data.by_gm_name ?? {};
+} catch {
+  // Fallback if file missing; Gakki will use default preset
+}
 
 // creating server instance
 const server = new McpServer({
@@ -194,6 +209,19 @@ function resolveInstrumentType(input: string): string | null {
     }
   }
   return bestDist <= 3 ? best : null;
+}
+
+/**
+ * Resolve an instrument name (e.g. "french horn", "trumpet") to a Gakki preset UUID.
+ * Uses gakki-instruments.json by_gm_name. Returns undefined if not found.
+ */
+function resolveGakkiPresetUuid(instrumentName: string): string | undefined {
+  const key = instrumentName
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[()]/g, "");
+  return gakkiByGmName[key];
 }
 
 /** Entity types that produce audio and their output field name (for DesktopAudioCable fromSocket). */
@@ -701,11 +729,18 @@ server.registerTool(
             const posX = args.x ?? autoLayoutOffset * 120;
             const posY = args.y ?? 0;
             autoLayoutOffset++;
-            const player = t.create(instrumentType as any, {
+            const createOpts: Record<string, unknown> = {
               positionX: posX,
               positionY: posY,
               displayName: `${instrumentType} ${autoLayoutOffset}`,
-            });
+            };
+            if (instrumentType === "gakki" && args.instrument) {
+              const presetUuid = resolveGakkiPresetUuid(args.instrument);
+              if (presetUuid) {
+                createOpts.soundfontId = presetUuid;
+              }
+            }
+            const player = t.create(instrumentType as any, createOpts);
             if (!player) {
               return {
                 error: `Failed to create ${instrumentType} instrument`,

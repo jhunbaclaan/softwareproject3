@@ -908,6 +908,29 @@ input[type="number"] {
     resize: vertical;
     min-height: 80px;
 }
+
+.music-generate-section {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.music-generate-section .abc-textarea {
+    margin-top: 0;
+}
+.music-error {
+    color: var(--error, #c00);
+    font-size: 0.9em;
+    margin: 0;
+}
+.music-player {
+    margin-top: 4px;
+}
+.music-player audio {
+    width: 100%;
+    max-height: 48px;
+}
+
 .composer {
     display: grid;
     grid-template-columns: 1fr auto;
