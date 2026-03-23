@@ -201,7 +201,35 @@ export default function App() {
     }
     return 'comfortable';
   });
+  const [tutorialStep, setTutorialStep] = useState(() => {
+    // For testing, always show tutorial on load
+    return 1;
+  });
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  const tutorialSteps = [
+    { title: 'Console', text: 'This is the console where you can log in and manage your projects.' },
+    { title: 'Chat Box', text: 'This is the chat box where you can interact with the agent and generate music.' },
+    { title: 'Settings Cogwheel', text: 'This is the settings cogwheel to customize your experience.' }
+  ];
+
+  const nextTutorialStep = () => {
+    if (tutorialStep < tutorialSteps.length) {
+      setTutorialStep(tutorialStep + 1);
+    } else {
+      setTutorialStep(0);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('tutorialCompleted', 'true');
+      }
+    }
+  };
+
+  const skipTutorial = () => {
+    setTutorialStep(0);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('tutorialCompleted', 'true');
+    }
+  };
 
   useEffect(() => {
     setTempFontSize(fontSize.toString());
@@ -1154,6 +1182,29 @@ export default function App() {
           </aside>
         )}
       </div>
+
+      {tutorialStep > 0 && tutorialStep <= tutorialSteps.length && (
+        <div className="tutorial-overlay" onClick={skipTutorial}>
+          <div
+            className={`tutorial-modal arrow-${tutorialStep === 1 ? 'left' : tutorialStep === 2 ? 'bottom' : 'right'}`}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              ...(tutorialStep === 1 ? { left: '310px', top: '200px' } :
+                tutorialStep === 2 ? { left: '700px', top: '575px' } :
+                  tutorialStep === 3 ? { left: '77vw', top: '0.5vw' } : {})
+            }}
+          >
+            <h2>{tutorialSteps[tutorialStep - 1].title}</h2>
+            <p>{tutorialSteps[tutorialStep - 1].text}</p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              <button onClick={skipTutorial}>Skip Tutorial</button>
+              <button onClick={nextTutorialStep}>
+                {tutorialStep === tutorialSteps.length ? 'Finish' : 'Next'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -881,6 +881,7 @@ input[type="number"] {
 .abc-input-section {
     grid-column: 1 / -1;
 }
+
 .abc-toggle {
     background: var(--surface-alt);
     border: 1px solid var(--border);
@@ -891,10 +892,12 @@ input[type="number"] {
     cursor: pointer;
     font-family: inherit;
 }
+
 .abc-toggle:hover {
     color: var(--ink);
     background: var(--surface);
 }
+
 .abc-textarea {
     width: 100%;
     margin-top: 8px;
@@ -915,17 +918,21 @@ input[type="number"] {
     flex-direction: column;
     gap: 8px;
 }
+
 .music-generate-section .abc-textarea {
     margin-top: 0;
 }
+
 .music-error {
     color: var(--error, #c00);
     font-size: 0.9em;
     margin: 0;
 }
+
 .music-player {
     margin-top: 4px;
 }
+
 .music-player audio {
     width: 100%;
     max-height: 48px;
@@ -1131,4 +1138,120 @@ label {
     .composer {
         grid-template-columns: 1fr;
     }
+}
+
+/* ── Tutorial Modal ───────────────────────────── */
+
+.tutorial-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.tutorial-modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 20px;
+    max-width: 350px;
+    box-shadow: var(--shadow);
+    color: var(--ink);
+    text-align: center;
+    position: relative;
+}
+
+.tutorial-modal.arrow-left::before {
+    content: '';
+    position: absolute;
+    left: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-top: 10px solid transparent;
+    border-bottom: 10px solid transparent;
+    border-right: 10px solid var(--surface);
+    border-right-color: var(--surface);
+}
+
+.tutorial-modal.arrow-left::after {
+    content: '';
+    position: absolute;
+    left: -9px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-top: 9px solid transparent;
+    border-bottom: 9px solid transparent;
+    border-right: 9px solid var(--border);
+}
+
+.tutorial-modal.arrow-right::before {
+    content: '';
+    position: absolute;
+    right: -10px;
+    top: 20px;
+    width: 0;
+    height: 0;
+    border-top: 10px solid transparent;
+    border-bottom: 10px solid transparent;
+    border-left: 10px solid var(--surface);
+}
+
+.tutorial-modal.arrow-right::after {
+    content: '';
+    position: absolute;
+    right: -9px;
+    top: 21px;
+    width: 0;
+    height: 0;
+    border-top: 9px solid transparent;
+    border-bottom: 9px solid transparent;
+    border-left: 9px solid var(--border);
+}
+
+.tutorial-modal.arrow-bottom::before {
+    content: '';
+    position: absolute;
+    bottom: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-top: 10px solid var(--surface);
+}
+
+.tutorial-modal.arrow-bottom::after {
+    content: '';
+    position: absolute;
+    bottom: -9px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 9px solid transparent;
+    border-right: 9px solid transparent;
+    border-top: 9px solid var(--border);
+}
+
+.tutorial-modal h2 {
+    font-family: 'Fraunces', serif;
+    margin-bottom: 10px;
+}
+
+.tutorial-modal p {
+    margin: 10px 0;
+}
+
+.tutorial-modal button {
+    padding: 8px 16px;
+    margin: 0 5px;
 }
