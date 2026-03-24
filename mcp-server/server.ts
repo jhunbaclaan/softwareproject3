@@ -41,30 +41,47 @@ let tokenManager: TokenManager | null = null;
 let autoLayoutOffset = 0;
 
 const VALID_ENTITY_TYPES = [
-  "heisenberg",
-  "bassline",
-  "machiniste",
-  "tonematrix",
-  "stompboxDelay",
-  "notetrack",
+  "audioMerger", "audioSplitter", "autoFilter", "bandSplitter",
+  "bassline", "beatbox8", "beatbox9", "centroid", "crossfader", "curve", "exciter",
+  "gakki", "graphicalEQ", "gravity", "heisenberg", "helmholtz", "kobolt", "machiniste",
+  "matrixArpeggiator", "minimixer", "noteSplitter", "panorama", "pulsar", "pulverisateur",
+  "quantum", "quasar", "rasselbock", "ringModulator", "space", "stereoEnhancer",
+  "stompboxChorus", "stompboxCompressor", "stompboxCrusher", "stompboxDelay",
+  "stompboxFlanger", "stompboxGate", "stompboxParametricEqualizer", "stompboxPhaser",
+  "stompboxPitchDelay", "stompboxReverb", "stompboxSlope", "stompboxStereoDetune",
+  "stompboxTube", "tinyGain", "tonematrix", "waveshaper", "notetrack",
+  "mixerChannel", "mixerMaster", "mixerGroup", "mixerAux", "mixerReverbAux", "mixerDelayAux"
 ] as const;
 
 const ENTITY_TYPE_ALIASES: Record<string, string> = {
   machinedrum: "machiniste",
   "drum machine": "machiniste",
   drummachine: "machiniste",
+  "808": "beatbox8",
+  "909": "beatbox9",
+  chorus: "stompboxChorus",
+  compressor: "stompboxCompressor",
+  crusher: "stompboxCrusher",
+  delay: "stompboxDelay",
+  flanger: "stompboxFlanger",
+  gate: "stompboxGate",
+  eq: "graphicalEQ",
+  phaser: "stompboxPhaser",
+  "pitch delay": "stompboxPitchDelay",
+  reverb: "stompboxReverb",
+  slope: "stompboxSlope",
+  detune: "stompboxStereoDetune",
+  tube: "stompboxTube",
+  sampler: "space",
+  modular: "pulverisateur",
+  "fm synth": "pulsar"
 };
 
 /** Instruments that can play note tracks (NoteTrackPlayer). Used for add-abc-track. */
 const NOTE_TRACK_INSTRUMENTS = [
-  "heisenberg",
-  "bassline",
-  "space",
-  "gakki",
-  "pulverisateur",
-  "tonematrix",
-  "machiniste",
-  "matrixArpeggiator",
+  "heisenberg", "bassline", "space", "gakki", "pulverisateur",
+  "tonematrix", "machiniste", "matrixArpeggiator", "pulsar",
+  "kobolt", "beatbox8", "beatbox9", "centroid", "rasselbock"
 ] as const;
 
 const INSTRUMENT_ALIASES: Record<string, string> = {
@@ -94,6 +111,10 @@ const INSTRUMENT_ALIASES: Record<string, string> = {
   woodwind: "heisenberg",
   flute: "heisenberg",
   oboe: "heisenberg",
+  "808": "beatbox8",
+  "909": "beatbox9",
+  modular: "pulverisateur",
+  fm: "pulsar"
 };
 
 /** Audiotool ticks: 1 whole note = 15360, 1 quarter = 3840 */
@@ -296,6 +317,42 @@ const AUDIO_OUTPUT_FIELD: Record<string, string> = {
   gakki: "audioOutput",
   pulverisateur: "audioOutput",
   matrixArpeggiator: "audioOutput",
+  audioMerger: "audioOutput",
+  audioSplitter: "audioOutput1",
+  autoFilter: "audioOutput",
+  bandSplitter: "highOutput",
+  beatbox8: "mainOutput",
+  beatbox9: "mainOutput",
+  centroid: "audioOutput",
+  crossfader: "audioOutput",
+  curve: "audioOutput",
+  exciter: "audioOutput",
+  graphicalEQ: "audioOutput",
+  gravity: "audioOutput",
+  helmholtz: "audioOutput",
+  kobolt: "audioOutput",
+  minimixer: "mainOutput",
+  panorama: "audioOutput",
+  pulsar: "audioOutput",
+  quantum: "audioOutput",
+  quasar: "audioOutput",
+  rasselbock: "audioOutput",
+  ringModulator: "audioOutput",
+  stereoEnhancer: "audioOutput",
+  stompboxChorus: "audioOutput",
+  stompboxCompressor: "audioOutput",
+  stompboxCrusher: "audioOutput",
+  stompboxFlanger: "audioOutput",
+  stompboxGate: "audioOutput",
+  stompboxParametricEqualizer: "audioOutput",
+  stompboxPhaser: "audioOutput",
+  stompboxPitchDelay: "audioOutput",
+  stompboxReverb: "audioOutput",
+  stompboxSlope: "audioOutput",
+  stompboxStereoDetune: "audioOutput",
+  stompboxTube: "audioOutput",
+  tinyGain: "audioOutput",
+  waveshaper: "audioOutput"
 };
 
 /**
@@ -593,12 +650,11 @@ server.registerTool(
   {
     description: [
       "Add an entity (instrument or effect) to the Audiotool project.",
-      "Entity types and their musical roles:",
-      "  - 'heisenberg': polyphonic synth — pads, keys, chords, leads, atmospheric textures",
-      "  - 'bassline': monophonic bass synth — bass lines, acid sounds, sub-bass",
-      "  - 'machiniste': drum machine — beats, percussion, rhythmic patterns (also accepts 'machinedrum')",
-      "  - 'tonematrix': step sequencer — melodic loops, arpeggios, generative patterns",
-      "  - 'stompboxDelay': delay effect — echo, reverb-like delay, spatial effects",
+      "There are many entity types. Here are some examples by role:",
+      "  - Synths/Generators: 'heisenberg', 'bassline', 'pulsar', 'pulverisateur', 'kobolt', 'space'",
+      "  - Drums: 'machiniste', 'beatbox8', 'beatbox9'",
+      "  - Logic/Sequencers: 'tonematrix', 'matrixArpeggiator'",
+      "  - Effects: 'stompboxDelay', 'stompboxChorus', 'stompboxReverb', 'graphicalEQ', 'stompboxCompressor', etc.",
       "When the user describes a sound or style (e.g. 'Daft Punk', 'warm pad'), pick the most fitting entity type.",
       "Typos are tolerated (e.g. 'hisenberg' resolves to 'heisenberg').",
       "If x/y are omitted the server auto-places the entity at a default position.",
@@ -621,6 +677,11 @@ server.registerTool(
         .number()
         .optional()
         .describe("Y position (optional, auto-placed if omitted)"),
+      autoConnectToMixer: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe("Whether to automatically connect this device's output to a new mixer channel. Set to false for insert/mastering effects.")
     }),
   },
   async (args: {
@@ -628,6 +689,7 @@ server.registerTool(
     properties?: Record<string, any>;
     x?: number;
     y?: number;
+    autoConnectToMixer?: boolean;
   }) => {
     try {
       const { properties } = args;
@@ -675,7 +737,10 @@ server.registerTool(
             };
           }
 
-          connectDeviceToStagebox(t, newEntity, resolvedType);
+          if (args.autoConnectToMixer !== false) {
+            connectDeviceToStagebox(t, newEntity, resolvedType);
+          }
+          
           if (resolvedType === "heisenberg") {
             setHeisenbergOperatorAGain(t, newEntity, 0.5);
           }
@@ -737,8 +802,8 @@ server.registerTool(
       "creates a NoteTrack, NoteCollection, NoteRegion, and adds all notes. Call this when the user",
       "provides music in ABC notation (e.g. X:1, K:C, L:1/4, CDEF GABc|).",
       "Orchestral: use instrument=french horn (etc.) or orchestralVoice; do not use instrument=gakki alone (defaults to piano).",
-      "Other instruments: heisenberg (poly synth), bassline (bass), space (sampler), gakki device for orchestral GM sounds,",
-      "pulverisateur, tonematrix, machiniste (drums), matrixArpeggiator.",
+      "Other instruments: heisenberg, bassline, pulsar, kobolt, space, gakki, ",
+      "pulverisateur, tonematrix, machiniste, beatbox8, beatbox9, matrixArpeggiator, etc.",
     ].join(" "),
     inputSchema: z.object({
       abcNotation: z
@@ -1019,6 +1084,7 @@ server.registerTool(
       "  machiniste: globalModulationDepth [-1,1], mainOutputGain [0-1], patternIndex [0-31], isActive (bool)",
       "  tonematrix: patternIndex [0-7], isActive (bool)",
       "  stompboxDelay: feedbackFactor [0-1], mix [0-1], stepCount [1-7], stepLengthIndex [1-3], isActive (bool)",
+      "For other entities, use the 'inspect-entity' tool first to discover the exact names of available fields and their types.",
     ].join("\n"),
     inputSchema: z.object({
       entityID: z.string().describe("ID of the entity to update"),
@@ -1160,6 +1226,174 @@ server.registerTool(
           {
             type: "text",
             text: `Failed to move entity: ${errorMsg}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+// inspect entity tool
+server.registerTool(
+  "inspect-entity",
+  {
+    description: "Inspect an entity to see its available fields/parameters and their current scalar values. Crucial for discovering how to tweak new entities.",
+    inputSchema: z.object({
+      entityID: z.string().describe("ID of the entity to inspect"),
+    }),
+  },
+  async (args: { entityID: string }) => {
+    try {
+      const { entityID } = args;
+      const doc = await getDocument();
+      const entity = doc.queryEntities.get().find((e) => e.id === entityID);
+      
+      if (!entity) {
+        throw new Error(`Entity with ID ${entityID} not found`);
+      }
+
+      const exportedFields: Record<string, any> = {};
+      const fields = entity.fields as Record<string, any>;
+      
+      for (const [key, field] of Object.entries(fields)) {
+        if (field && typeof field === 'object' && 'value' in field) {
+          exportedFields[key] = field.value;
+        } else if (field && typeof field === 'object' && 'location' in field) {
+          exportedFields[key] = `[Socket/Port: ${field.location}]`;
+        }
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Entity ${entityID} (${entity.entityType}) Fields:\n${JSON.stringify(exportedFields, null, 2)}`,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Failed to inspect entity: ${errorMsg}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+// connect entities tool
+server.registerTool(
+  "connect-entities",
+  {
+    description: "Connect the audio/note output of one entity to the input of another. Use inspect-entity to discover the correct specific field names (like 'audioOutput' and 'audioInput').",
+    inputSchema: z.object({
+      sourceEntityId: z.string().describe("ID of the source entity (e.g. the synthesizer or effect outputting signal)"),
+      sourceField: z.string().describe("Name of the source field (e.g. 'audioOutput' or 'mainOutput')"),
+      targetEntityId: z.string().describe("ID of the target entity (e.g. an effect or mixerChannel receiving signal)"),
+      targetField: z.string().describe("Name of the target field (e.g. 'audioInput' or 'audioInput1')"),
+      cableType: z.string().optional().default("desktopAudioCable").describe("Type of cable to create. Default is 'desktopAudioCable'. For notes, use 'desktopNoteCable'."),
+    }),
+  },
+  async (args) => {
+    try {
+      const { sourceEntityId, sourceField, targetEntityId, targetField, cableType } = args;
+      const doc = await getDocument();
+      
+      const modifyResult = await doc.modify((t) => {
+        try {
+          const sourceEntity = t.entities.getEntity(sourceEntityId);
+          if (!sourceEntity) return { error: `Source entity ${sourceEntityId} not found` };
+          
+          const targetEntity = t.entities.getEntity(targetEntityId);
+          if (!targetEntity) return { error: `Target entity ${targetEntityId} not found` };
+          
+          const sourceSocket = (sourceEntity.fields as any)[sourceField];
+          if (!sourceSocket || !sourceSocket.location) {
+            return { error: `Field '${sourceField}' missing or not a socket on entity ${sourceEntityId}` };
+          }
+          
+          const targetSocket = (targetEntity.fields as any)[targetField];
+          if (!targetSocket || !targetSocket.location) {
+            return { error: `Field '${targetField}' missing or not a socket on entity ${targetEntityId}` };
+          }
+          
+          const newCable = t.create(cableType as any, {
+            fromSocket: sourceSocket.location,
+            toSocket: targetSocket.location
+          });
+          
+          if (!newCable) return { error: "Failed to create cable" };
+          
+          return { ok: true, cableId: (newCable as any).id };
+        } catch (innerError) {
+          return { error: innerError instanceof Error ? innerError.message : String(innerError) };
+        }
+      });
+      
+      if ("error" in modifyResult) {
+        throw new Error(modifyResult.error as string);
+      }
+      
+      return {
+        content: [{ type: "text", text: `Connected ${sourceEntityId}.${sourceField} to ${targetEntityId}.${targetField} using ${cableType}. Cable ID: ${(modifyResult as any).cableId}` }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: "text", text: `Failed to connect entities: ${err instanceof Error ? err.message : String(err)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// disconnect entities tool
+server.registerTool(
+  "disconnect-entities",
+  {
+    description: "Remove a cable connection between entities using its cable ID. Use list-entities or inspect-entity beforehand to find cable endpoints if needed, though they are usually reported when created.",
+    inputSchema: z.object({
+      cableId: z.string().describe("ID of the cable entity to remove"),
+    }),
+  },
+  async (args: { cableId: string }) => {
+    try {
+      const { cableId } = args;
+      const doc = await getDocument();
+      
+      const modifyResult = await doc.modify((t) => {
+        try {
+          t.remove(cableId);
+          return { ok: true };
+        } catch (innerError) {
+          return { error: innerError instanceof Error ? innerError.message : String(innerError) };
+        }
+      });
+      
+      if ("error" in modifyResult) {
+        throw new Error(modifyResult.error as string);
+      }
+      
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully disconnected cable ${cableId}`,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Failed to disconnect cable: ${errorMsg}`,
           },
         ],
         isError: true,
