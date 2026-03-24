@@ -11,3 +11,4 @@ storage/
 /.ai/mcp/mcp.json
 /.cursor
 /.vscode
+/backend/test_output.txt

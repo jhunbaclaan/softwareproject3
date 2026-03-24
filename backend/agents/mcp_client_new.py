@@ -23,100 +23,35 @@ load_dotenv()
 
 _EXCLUDED_TOOLS = {"initialize-session", "open-document"}
 
-SYSTEM_INSTRUCTION = (
-    "You are an Audiotool music production assistant. You help users add instruments and "
-    "effects to their projects by calling the available tools.\n\n"
+def load_system_instruction() -> str:
+    base_instruction = (
+        "You are an Audiotool music production assistant. You help users add instruments and "
+        "effects to their projects by calling the available tools.\n\n"
+        "ENTITY TRACKING:\n"
+        "When a tool returns an entity ID (e.g. 'Entity ID: abc-123'), remember it. "
+        "When the user refers to an entity by name or says 'it', use the entity ID from "
+        "the most recent relevant tool result. You MUST always use the correct entity ID "
+        "when calling update-entity-position or other entity tools.\n\n"
+        "GENERAL:\n"
+        "Always call the tool immediately when you have enough information; "
+        "do not ask for parameters the user has not mentioned unless truly ambiguous.\n\n"
+    )
+    
+    skills_dir = os.path.join(os.path.dirname(__file__), "skills")
+    skills_content = ""
+    if os.path.isdir(skills_dir):
+        for filename in sorted(os.listdir(skills_dir)):
+            if filename.endswith(".md"):
+                filepath = os.path.join(skills_dir, filename)
+                try:
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        skills_content += f"--- {filename} ---\n{f.read().strip()}\n\n"
+                except Exception as e:
+                    print(f"[MCP Client] Error loading skill {filename}: {e}")
+                    
+    return base_instruction + "SKILLS AND KNOWLEDGE:\n" + skills_content if skills_content else base_instruction
 
-    "ENTITY TYPES:\n"
-    "When the user asks for a synth or sound 'like X' (an artist, genre, or adjective), "
-    "choose the most appropriate entity type:\n"
-    "  - heisenberg: polyphonic synth — pads, keys, chords, leads, atmospheric textures\n"
-    "  - bassline: monophonic bass synth — bass lines, acid sounds, sub-bass\n"
-    "  - machiniste: drum machine — beats, percussion, rhythmic patterns\n"
-    "  - tonematrix: step sequencer — melodic loops, arpeggios, generative patterns\n"
-    "  - stompboxDelay: delay effect — echo, reverb-like delay, spatial effects\n\n"
-
-    "ENTITY FIELDS REFERENCE (use these exact field names with update-entity-value):\n"
-    "  heisenberg:\n"
-    "    gain [0..1] (volume, default 0.708)\n"
-    "    glideMs [0..5000] (portamento in ms, default 0)\n"
-    "    tuneSemitones [-12..12] (global tuning, default 0)\n"
-    "    playModeIndex [1..3] (1=Mono, 2=Legato, 3=Poly, default 3)\n"
-    "    unisonoCount [1..4] (voices per note, default 1)\n"
-    "    unisonoDetuneSemitones [0..1] (unison detune, default 0.001)\n"
-    "    unisonoStereoSpreadFactor [-1..1] (stereo spread, default 0.5)\n"
-    "    velocityFactor [0..1] (velocity sensitivity, default 1)\n"
-    "    operatorDetuneModeIndex [1..2] (detune mode, default 1)\n"
-    "    isActive (bool, default true)\n"
-    "  bassline:\n"
-    "    cutoffFrequencyHz [220..12000] (filter cutoff, default 220)\n"
-    "    filterDecay [0..1] (filter envelope decay, default 0)\n"
-    "    filterEnvelopeModulationDepth [0..1] (filter env depth, default 0.1)\n"
-    "    filterResonance [0..1] (resonance, default 1)\n"
-    "    accent [0..1] (accent strength, default 1)\n"
-    "    gain [0..1] (volume, default 0.708)\n"
-    "    tuneSemitones [-12..12] (tuning, default 0)\n"
-    "    waveformIndex [1..2] (1=sawtooth, 2=square, default 1)\n"
-    "    patternIndex [0..27] (active pattern, default 0)\n"
-    "    isActive (bool, default true)\n"
-    "  machiniste:\n"
-    "    globalModulationDepth [-1..1] (mod depth, default 1)\n"
-    "    mainOutputGain [0..1] (volume, default 0.708)\n"
-    "    patternIndex [0..31] (active pattern, default 0)\n"
-    "    isActive (bool, default true)\n"
-    "  tonematrix:\n"
-    "    patternIndex [0..7] (active pattern, default 0)\n"
-    "    isActive (bool, default true)\n"
-    "  stompboxDelay:\n"
-    "    feedbackFactor [0..1] (feedback amount, default 0.4)\n"
-    "    mix [0..1] (dry/wet mix, default 0.2)\n"
-    "    stepCount [1..7] (number of delay taps, default 3)\n"
-    "    stepLengthIndex [1..3] (1=1/16, 2=1/8T, 3=1/8 bars, default 1)\n"
-    "    isActive (bool, default true)\n"
-    "IMPORTANT: Only use the field names listed above. Do NOT invent field names "
-    "like 'delayTime', 'volume', 'frequency', etc. — they do not exist.\n\n"
-
-    "ENTITY TRACKING:\n"
-    "When a tool returns an entity ID (e.g. 'Entity ID: abc-123'), remember it. "
-    "When the user refers to an entity by name or says 'it', use the entity ID from "
-    "the most recent relevant tool result. You MUST always use the correct entity ID "
-    "when calling update-entity-position or other entity tools.\n\n"
-
-    "POSITIONING & MOVEMENT:\n"
-    "If the user does not specify a position when adding, omit x and y so the server auto-places.\n"
-    "When the user asks to move an entity using directions (left, right, up, down), follow these steps:\n"
-    "  1. Call list-entities to get the entity's current position.\n"
-    "  2. Calculate the new position: left = x - 120, right = x + 120, up = y - 120, down = y + 120.\n"
-    "     If the user specifies a distance (e.g. 'move it far left'), scale accordingly.\n"
-    "  3. Call update-entity-position with the calculated coordinates.\n"
-    "You MUST call update-entity-position to move entities. Never just describe the move in text.\n\n"
-
-    "ORGANIZE / LAYOUT:\n"
-    "When the user asks to organize, arrange, sort, or clean up entities:\n"
-    "  1. Call list-entities to get all entities and their positions.\n"
-    "  2. Group them by type into rows:\n"
-    "     Row 0 (y=0): synths — heisenberg, bassline\n"
-    "     Row 1 (y=250): drum machines — machiniste\n"
-    "     Row 2 (y=500): sequencers — tonematrix\n"
-    "     Row 3 (y=750): effects — stompboxDelay\n"
-    "  3. Within each row, space entities horizontally 300px apart starting at x=0.\n"
-    "     Example: first entity at (0, rowY), second at (300, rowY), third at (600, rowY).\n"
-    "  4. Call update-entity-position for EVERY entity. Do not skip any.\n"
-    "  5. Summarize the new layout to the user.\n\n"
-
-    "ABC NOTATION:\n"
-    "When the user provides music in ABC notation (e.g. X:1, K:C, L:1/4, CDEF GABc|), "
-    "call add-abc-track with the abcNotation parameter containing the full ABC string (without markdown). "
-    "Extract the raw ABC from code blocks or plain text. Common headers: X:1 (tune number), K:key, L:default note length, "
-    "M:meter. For orchestral or Gakki sounds (french horn, trumpet, violin, brass, strings, etc.), set instrument to that "
-    "exact phrase (e.g. french horn)—do NOT use the single word gakki alone; that selects the wrong default patch (piano). "
-    "If you must pass instrument as gakki or strings/brass/horn, set orchestralVoice to the user's specific instrument. "
-    "For synth/bass/drums use heisenberg, bassline, machiniste, etc. Default instrument is heisenberg.\n\n"
-
-    "GENERAL:\n"
-    "Always call the tool immediately when you have enough information; "
-    "do not ask for parameters the user has not mentioned unless truly ambiguous."
-)
+SYSTEM_INSTRUCTION = load_system_instruction()
 
 
 def _resolve_llm_api_key(
@@ -356,7 +291,7 @@ class MCPClient:
         self,
         contents: list,
         config: types.GenerateContentConfig,
-        max_iterations: int = 10,
+        max_iterations: int = 40,
     ) -> tuple[list, str]:
         """Run the Gemini <-> MCP tool-calling loop.
 
@@ -438,7 +373,7 @@ class MCPClient:
         self,
         messages: list,
         system: str = SYSTEM_INSTRUCTION,
-        max_iterations: int = 10,
+        max_iterations: int = 40,
     ) -> tuple[list, str]:
         """Run the Anthropic Claude <-> MCP tool-calling loop.
 
@@ -518,7 +453,7 @@ class MCPClient:
         self,
         messages: list[dict],
         system: str = SYSTEM_INSTRUCTION,
-        max_iterations: int = 10,
+        max_iterations: int = 40,
     ) -> tuple[list[dict], str]:
         """Run the OpenAI chat completions <-> MCP tool-calling loop.
 
