@@ -924,9 +924,9 @@ input[type="number"] {
 }
 
 .music-daw-status {
-  margin: 0.5rem 0 0;
-  font-size: 0.85rem;
-  color: var(--success-text, #2d6a4f);
+    margin: 0.5rem 0 0;
+    font-size: 0.85rem;
+    color: var(--success-text, #2d6a4f);
 }
 
 .music-error {
@@ -1168,7 +1168,7 @@ label {
     box-shadow: var(--shadow);
     color: var(--ink);
     text-align: center;
-    position: relative;
+    position: absolute;
 }
 
 .tutorial-modal.arrow-left::before {

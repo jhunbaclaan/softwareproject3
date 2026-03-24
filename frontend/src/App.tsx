@@ -144,6 +144,7 @@ export default function App() {
     (loadSetting('llm.provider', 'gemini') as LLMProvider) || 'gemini'
   );
   const [llmApiKey, setLlmApiKey] = useState(() => loadSetting('llm.apiKey', ''));
+  const [elevenLabsApiKey, setElevenLabsApiKey] = useState(() => loadSetting('elevenlabs.apiKey', ''));
   const [darkMode, setDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       return window.localStorage.getItem('darkMode') === 'true';
@@ -209,6 +210,8 @@ export default function App() {
     // For testing, always show tutorial on load
     return 1;
   });
+  const [cogwheelPos, setCogwheelPos] = useState({ top: '50px', right: '20px' });
+  const cogwheelRef = useRef<HTMLButtonElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   const tutorialSteps = [
@@ -351,6 +354,21 @@ export default function App() {
     }
   }, [messageDensity]);
 
+  useEffect(() => {
+    const updateCogwheelPos = () => {
+      if (cogwheelRef.current) {
+        const rect = cogwheelRef.current.getBoundingClientRect();
+        setCogwheelPos({
+          top: `${rect.top + rect.height / 2 - 18}px`,
+          right: `${window.innerWidth - rect.left + 20}px`
+        });
+      }
+    };
+    updateCogwheelPos();
+    window.addEventListener('resize', updateCogwheelPos);
+    return () => window.removeEventListener('resize', updateCogwheelPos);
+  }, []);
+
   const addMessage = (role: Role, content: string) => {
     setMessages((prev) => [
       ...prev,
@@ -368,6 +386,9 @@ export default function App() {
   useEffect(() => {
     saveSetting('llm.apiKey', llmApiKey);
   }, [llmApiKey]);
+  useEffect(() => {
+    saveSetting('elevenlabs.apiKey', elevenLabsApiKey);
+  }, [elevenLabsApiKey]);
 
   useEffect(() => {
     return () => {
@@ -842,6 +863,7 @@ export default function App() {
                 Clear chat
               </button>
               <button
+                ref={cogwheelRef}
                 type="button"
                 className="cogwheel-btn"
                 onClick={() => setSettingsSidebarOpen(!settingsSidebarOpen)}
@@ -1146,41 +1168,6 @@ export default function App() {
               </div>
 
               <div className="settings-section">
-                <h4>LLM / Assistant</h4>
-                <div className="setting-item">
-                  <span className="setting-label">Provider</span>
-                  <select
-                    value={llmProvider}
-                    onChange={(e) => setLlmProvider(e.target.value as LLMProvider)}
-                    className="theme-select"
-                    aria-label="LLM provider"
-                  >
-                    <option value="gemini">Gemini (Google)</option>
-                    <option value="anthropic">Anthropic (Claude)</option>
-                    <option value="openai">OpenAI (GPT)</option>
-                  </select>
-                </div>
-                <div className="setting-item">
-                  <span className="setting-label">API Key (optional)</span>
-                  <input
-                    type="password"
-                    value={llmApiKey}
-                    onChange={(e) => setLlmApiKey(e.target.value)}
-                    placeholder={
-                      llmProvider === 'gemini'
-                        ? 'Uses GEMINI_API_KEY if empty'
-                        : llmProvider === 'anthropic'
-                          ? 'Uses ANTHROPIC_API_KEY if empty'
-                          : 'Uses OPENAI_API_KEY if empty'
-                    }
-                    className="font-size-input"
-                    aria-label="API key for LLM provider"
-                    autoComplete="off"
-                  />
-                </div>
-              </div>
-
-              <div className="settings-section">
                 <h4>Developer Settings</h4>
                 <div className="setting-item">
                   <span className="setting-label">DevSetting1</span>
@@ -1210,7 +1197,51 @@ export default function App() {
                     }}
                   />
                 </div>
+                <div className="setting-item">
+                  <span className="setting-label">Provider</span>
+                  <select
+                    value={llmProvider}
+                    onChange={(e) => setLlmProvider(e.target.value as LLMProvider)}
+                    className="theme-select"
+                    aria-label="LLM provider"
+                  >
+                    <option value="gemini">Gemini (Google)</option>
+                    <option value="anthropic">Anthropic (Claude)</option>
+                    <option value="openai">OpenAI (GPT)</option>
+                  </select>
+                </div>
+                <div className="setting-item">
+                  <span className="setting-label">LLM API Key (optional)</span>
+                  <input
+                    type="password"
+                    value={llmApiKey}
+                    onChange={(e) => setLlmApiKey(e.target.value)}
+                    placeholder={
+                      llmProvider === 'gemini'
+                        ? 'Uses GEMINI_API_KEY if empty'
+                        : llmProvider === 'anthropic'
+                          ? 'Uses ANTHROPIC_API_KEY if empty'
+                          : 'Uses OPENAI_API_KEY if empty'
+                    }
+                    className="font-size-input"
+                    aria-label="API key for LLM provider"
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="setting-item">
+                  <span className="setting-label">ElevenLabs API Key</span>
+                  <input
+                    type="password"
+                    value={elevenLabsApiKey}
+                    onChange={(e) => setElevenLabsApiKey(e.target.value)}
+                    placeholder="Enter ElevenLabs API key"
+                    className="font-size-input"
+                    aria-label="ElevenLabs API key"
+                    autoComplete="off"
+                  />
+                </div>
               </div>
+
             </div>
           </aside>
         )}
@@ -1222,9 +1253,9 @@ export default function App() {
             className={`tutorial-modal arrow-${tutorialStep === 1 ? 'left' : tutorialStep === 2 ? 'bottom' : 'right'}`}
             onClick={(e) => e.stopPropagation()}
             style={{
-              ...(tutorialStep === 1 ? { left: '310px', top: '200px' } :
-                tutorialStep === 2 ? { left: '700px', top: '575px' } :
-                  tutorialStep === 3 ? { left: '77vw', top: '0.5vw' } : {})
+              ...(tutorialStep === 1 ? { left: 'calc(var(--sidebar-w) + 20px)', top: '200px' } :
+                tutorialStep === 2 ? { left: 'calc(50vw - 175px)', top: 'calc(50vh - 10px)' } :
+                  tutorialStep === 3 ? { right: cogwheelPos.right, top: cogwheelPos.top } : {})
             }}
           >
             <h2>{tutorialSteps[tutorialStep - 1].title}</h2>
