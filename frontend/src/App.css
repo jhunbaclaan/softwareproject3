@@ -923,6 +923,12 @@ input[type="number"] {
     margin-top: 0;
 }
 
+.music-daw-status {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: var(--success-text, #2d6a4f);
+}
+
 .music-error {
     color: var(--error, #c00);
     font-size: 0.9em;

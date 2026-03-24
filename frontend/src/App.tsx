@@ -8,6 +8,7 @@ import {
 } from '@audiotool/nexus';
 import './App.css';
 import { runAgent, generateMusic, type AuthTokens, type ConversationMessage, type LLMProvider } from './api';
+import { importAudioBlobToProject } from './audiotool/importGeneratedAudio';
 
 type Role = 'user' | 'assistant';
 
@@ -107,11 +108,14 @@ export default function App() {
   const [musicGenerating, setMusicGenerating] = useState(false);
   const [musicAudioUrl, setMusicAudioUrl] = useState<string | null>(null);
   const [musicError, setMusicError] = useState<string | null>(null);
+  const [musicDawMessage, setMusicDawMessage] = useState<string | null>(null);
+  const [musicDawError, setMusicDawError] = useState<string | null>(null);
+  const audioImportLayoutRef = useRef(0);
   const [isRunning, setIsRunning] = useState(false);
   const authConfig = {
     clientId: envClientId ?? '',
     redirectUrl: envRedirectUrl ?? defaultRedirectUrl,
-    scope: envScope ?? 'project:write',
+    scope: envScope ?? 'project:write sample:write',
   };
   const [authStatus, setAuthStatus] = useState<LoginStatus | null>(null);
   const [authUser, setAuthUser] = useState<string | null>(null);
@@ -613,8 +617,12 @@ export default function App() {
     const trimmed = musicPrompt.trim();
     if (!trimmed || musicGenerating) return;
 
+    const musicLengthMs = 15000;
+
     setMusicGenerating(true);
     setMusicError(null);
+    setMusicDawMessage(null);
+    setMusicDawError(null);
     if (musicAudioUrl) {
       URL.revokeObjectURL(musicAudioUrl);
       setMusicAudioUrl(null);
@@ -623,7 +631,7 @@ export default function App() {
     try {
       const result = await generateMusic('http://127.0.0.1:8000', {
         prompt: trimmed,
-        music_length_ms: 15000,
+        music_length_ms: musicLengthMs,
         force_instrumental: false,
       });
       const blob = new Blob(
@@ -632,6 +640,29 @@ export default function App() {
       );
       const url = URL.createObjectURL(blob);
       setMusicAudioUrl(url);
+
+      if (client && syncedDocument && projectStatus === 'connected') {
+        setMusicDawMessage('Uploading sample and adding to timeline…');
+        try {
+          const idx = audioImportLayoutRef.current++;
+          await importAudioBlobToProject(client, syncedDocument, blob, {
+            displayName: `ElevenLabs: ${trimmed.slice(0, 80)}`,
+            durationMs: musicLengthMs,
+            layoutIndex: idx,
+          });
+          setMusicDawMessage('Added to your Audiotool project (audio track + region).');
+          setMusicDawError(null);
+        } catch (dawErr) {
+          setMusicDawMessage(null);
+          setMusicDawError(
+            `Could not add to DAW: ${formatError(dawErr)}. The preview above still plays locally.`,
+          );
+        }
+      } else {
+        setMusicDawMessage(
+          'Connect an Audiotool project (sidebar) to place this clip on the project timeline automatically.',
+        );
+      }
     } catch (err) {
       setMusicError(formatError(err));
     } finally {
@@ -899,6 +930,8 @@ export default function App() {
                       {musicGenerating ? 'Generating...' : 'Generate'}
                     </button>
                     {musicError && <p className="music-error">{musicError}</p>}
+                    {musicDawMessage && <p className="music-daw-status">{musicDawMessage}</p>}
+                    {musicDawError && <p className="music-error">{musicDawError}</p>}
                     {musicAudioUrl && (
                       <div className="music-player">
                         <audio controls src={musicAudioUrl} />
