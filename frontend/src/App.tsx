@@ -653,7 +653,8 @@ export default function App() {
       const result = await generateMusic('http://127.0.0.1:8000', {
         prompt: trimmed,
         music_length_ms: musicLengthMs,
-        force_instrumental: false,
+        force_instrumental: true,
+        elevenlabs_api_key: elevenLabsApiKey.trim() || undefined,
       });
       const blob = new Blob(
         [Uint8Array.from(atob(result.audio_base64), (c) => c.charCodeAt(0))],

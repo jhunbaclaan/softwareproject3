@@ -24,10 +24,17 @@ class MusicGenerateRequest(BaseModel):
         le=600000,
         description="Length in milliseconds (3-600 seconds)",
     )
-    force_instrumental: bool = Field(default=False)
+    force_instrumental: bool = Field(
+        default=True,
+        description="When true, generated music has no vocals.",
+    )
     output_format: str = Field(
         default="mp3_44100_128",
         description="Format: mp3_22050_32, mp3_44100_128, etc.",
+    )
+    elevenlabs_api_key: Optional[str] = Field(
+        default=None,
+        description="Optional key from client; falls back to ELEVENLABS_API_KEY when unset.",
     )
 
 
@@ -39,25 +46,25 @@ class MusicGenerateResponse(BaseModel):
     prompt: str
 
 
-def _get_elevenlabs_client():
-    """Get ElevenLabs client with API key from env."""
-    api_key = os.getenv("ELEVENLABS_API_KEY")
-    if not api_key or not api_key.strip():
+def _get_elevenlabs_client(request_key: Optional[str] = None):
+    """Get ElevenLabs client using request key or ELEVENLABS_API_KEY env."""
+    api_key = (request_key or "").strip() or (os.getenv("ELEVENLABS_API_KEY") or "").strip()
+    if not api_key:
         raise HTTPException(
             status_code=503,
-            detail="ELEVENLABS_API_KEY environment variable is not set. "
-            "Add your ElevenLabs API key to enable music generation.",
+            detail="No ElevenLabs API key: set it in Developer settings or set "
+            "ELEVENLABS_API_KEY on the server.",
         )
     from elevenlabs.client import ElevenLabs
 
-    return ElevenLabs(api_key=api_key.strip())
+    return ElevenLabs(api_key=api_key)
 
 
 @router.post("/generate", response_model=MusicGenerateResponse)
 async def generate_music(request: MusicGenerateRequest) -> MusicGenerateResponse:
     """Generate music from a text prompt using ElevenLabs Music API."""
     try:
-        client = _get_elevenlabs_client()
+        client = _get_elevenlabs_client(request.elevenlabs_api_key)
     except HTTPException:
         raise
     except Exception as e:

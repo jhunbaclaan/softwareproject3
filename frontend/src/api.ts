@@ -63,6 +63,8 @@ export type MusicGenerateRequest = {
   music_length_ms?: number;
   force_instrumental?: boolean;
   output_format?: string;
+  /** When set, used instead of server ELEVENLABS_API_KEY (e.g. Developer settings). */
+  elevenlabs_api_key?: string;
 };
 
 export type MusicGenerateResponse = {

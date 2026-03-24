@@ -39,14 +39,6 @@ cd mcp-server && npm start
 cd frontend && npm run dev
 ```
 
-## ElevenLabs Music Generation
-
-The app includes ElevenLabs API integration for AI music generation. To enable it:
-
-1. Get an API key from [ElevenLabs](https://elevenlabs.io/) (paid plan required for music).
-2. Set the environment variable: `ELEVENLABS_API_KEY=your_key_here`
-3. Use the "Generate music (ElevenLabs)" section in the chat composer.
-
 ## Updating Dependencies
 
 ```bash
