@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import Optional, List, Literal
+from typing import Any, Dict, Optional, List, Literal, Tuple
 from contextlib import AsyncExitStack
 
 from mcp import ClientSession, StdioServerParameters
@@ -18,10 +18,31 @@ from .schema_converter import (
     convert_mcp_schema_to_anthropic,
     convert_mcp_schema_to_openai,
 )
+from services.music_generation import generate_music_base64
 
 load_dotenv()
 
 _EXCLUDED_TOOLS = {"initialize-session", "open-document"}
+
+GENERATE_MUSIC_TOOL_NAME = "generate-music-elevenlabs"
+GENERATE_MUSIC_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "prompt": {
+            "type": "string",
+            "description": "Description of the music to generate (genre, mood, instruments, tempo, length feel).",
+        },
+        "music_length_ms": {
+            "type": "integer",
+            "description": "Length in milliseconds (3000–600000). Default 15000.",
+        },
+        "force_instrumental": {
+            "type": "boolean",
+            "description": "If true (default), no vocals.",
+        },
+    },
+    "required": ["prompt"],
+}
 
 def load_system_instruction() -> str:
     base_instruction = (
@@ -35,6 +56,10 @@ def load_system_instruction() -> str:
         "GENERAL:\n"
         "Always call the tool immediately when you have enough information; "
         "do not ask for parameters the user has not mentioned unless truly ambiguous.\n\n"
+        "ELEVENLABS MUSIC:\n"
+        "When the user wants AI-generated audio from a text description (e.g. 'make a 15s lo-fi beat'), "
+        f"call the `{GENERATE_MUSIC_TOOL_NAME}` tool with their prompt. Do not use this for ABC notation "
+        "(use add-abc-track instead).\n\n"
     )
     
     skills_dir = os.path.join(os.path.dirname(__file__), "skills")
@@ -117,6 +142,70 @@ class MCPClient:
             self._anthropic_model = None
             self._openai_client = AsyncOpenAI(api_key=self._llm_api_key)
             self._openai_model = "gpt-4o"
+
+        self._elevenlabs_api_key: Optional[str] = None
+
+    def set_elevenlabs_api_key(self, key: Optional[str]) -> None:
+        """Per-request key from the client; falls back to ELEVENLABS_API_KEY in the tool."""
+        self._elevenlabs_api_key = key.strip() if key and key.strip() else None
+
+    async def _dispatch_tool(
+        self, tool_name: str, tool_args: dict
+    ) -> Tuple[str, Optional[Dict[str, Any]]]:
+        """Call MCP or a built-in tool. Returns (text_for_model, optional generated_music dict)."""
+        if tool_name == GENERATE_MUSIC_TOOL_NAME:
+            return await self._execute_generate_music(tool_args)
+        if self.session is None:
+            raise RuntimeError("Not connected – call connect_to_server() first")
+        result = await self.session.call_tool(tool_name, tool_args)
+        return self._extract_tool_result(result), None
+
+    async def _execute_generate_music(
+        self, tool_args: dict
+    ) -> Tuple[str, Optional[Dict[str, Any]]]:
+        prompt = (tool_args.get("prompt") or "").strip()
+        if not prompt:
+            return "Error: prompt is required for music generation.", None
+
+        raw_len = tool_args.get("music_length_ms")
+        if raw_len is None:
+            length = 15000
+        else:
+            try:
+                length = int(raw_len)
+            except (TypeError, ValueError):
+                length = 15000
+        length = max(3000, min(600_000, length))
+
+        raw_inst = tool_args.get("force_instrumental")
+        if raw_inst is None:
+            instrumental = True
+        elif isinstance(raw_inst, str):
+            instrumental = raw_inst.lower() in ("true", "1", "yes")
+        else:
+            instrumental = bool(raw_inst)
+
+        try:
+            b64, fmt, echo, ms = await generate_music_base64(
+                prompt=prompt,
+                music_length_ms=length,
+                force_instrumental=instrumental,
+                api_key=self._elevenlabs_api_key,
+            )
+        except Exception as e:
+            return f"ElevenLabs music generation failed: {e}", None
+
+        summary = (
+            f"Success: generated about {length // 1000}s of "
+            f"{'instrumental ' if instrumental else ''}audio ({fmt}). "
+            "The user can play it in the app; if a project is connected, the clip can be added to the timeline."
+        )
+        return summary, {
+            "audio_base64": b64,
+            "format": fmt,
+            "prompt": echo,
+            "music_length_ms": ms,
+        }
 
     async def connect_to_server(self, server_script_path: str):
         """Connect to an MCP server
@@ -225,7 +314,20 @@ class MCPClient:
             )
             function_declarations.append(func_decl)
 
-        self._cached_tools = [types.Tool(function_declarations=function_declarations)] if function_declarations else None
+        gm_music_schema = convert_mcp_schema_to_gemini(GENERATE_MUSIC_SCHEMA)
+        function_declarations.append(
+            types.FunctionDeclaration(
+                name=GENERATE_MUSIC_TOOL_NAME,
+                description=(
+                    "Generate original music audio from a text prompt using ElevenLabs. "
+                    "Use when the user asks for AI-generated music, beds, beats, or jingles—not for ABC notation "
+                    "(use add-abc-track for ABC)."
+                ),
+                parameters=gm_music_schema,
+            )
+        )
+
+        self._cached_tools = [types.Tool(function_declarations=function_declarations)]
         return self._cached_tools
 
     async def _get_anthropic_tools(self) -> list:
@@ -249,6 +351,14 @@ class MCPClient:
                 "description": tool.description or "",
                 "input_schema": cleaned_schema,
             })
+        tools.append({
+            "name": GENERATE_MUSIC_TOOL_NAME,
+            "description": (
+                "Generate original music audio from a text prompt (ElevenLabs). "
+                "For AI-generated music requests—not ABC notation (add-abc-track)."
+            ),
+            "input_schema": convert_mcp_schema_to_anthropic(GENERATE_MUSIC_SCHEMA),
+        })
         self._cached_anthropic_tools = tools
         return self._cached_anthropic_tools
 
@@ -276,6 +386,17 @@ class MCPClient:
                     "parameters": cleaned_schema,
                 },
             })
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": GENERATE_MUSIC_TOOL_NAME,
+                "description": (
+                    "Generate original music audio from a text prompt (ElevenLabs). "
+                    "Not for ABC notation."
+                ),
+                "parameters": convert_mcp_schema_to_openai(GENERATE_MUSIC_SCHEMA),
+            },
+        })
         self._cached_openai_tools = tools
         return self._cached_openai_tools
 
@@ -292,10 +413,10 @@ class MCPClient:
         contents: list,
         config: types.GenerateContentConfig,
         max_iterations: int = 40,
-    ) -> tuple[list, str]:
+    ) -> tuple[list, str, Optional[Dict[str, Any]]]:
         """Run the Gemini <-> MCP tool-calling loop.
 
-        Returns (updated_contents, final_text_reply).
+        Returns (updated_contents, final_text_reply, optional generated_music dict).
         """
         response = await self._gemini_client.aio.models.generate_content(
             model=self._gemini_model,
@@ -303,11 +424,9 @@ class MCPClient:
             config=config,
         )
 
-        if self.session is None:
-            raise RuntimeError("Not connected – call connect_to_server() first")
-
         final_text: list[str] = []
         last_tool_result: Optional[str] = None
+        music_attachment: Optional[Dict[str, Any]] = None
 
         for _ in range(max_iterations):
             has_function_call = False
@@ -331,8 +450,9 @@ class MCPClient:
 
                         print(f"[MCP Client] Calling tool: {tool_name} with args: {tool_args}")
                         try:
-                            result = await self.session.call_tool(tool_name, tool_args)
-                            result_str = self._extract_tool_result(result)
+                            result_str, attach = await self._dispatch_tool(tool_name, tool_args)
+                            if attach is not None:
+                                music_attachment = attach
                         except Exception as e:
                             result_str = f"Error calling tool {tool_name}: {str(e)}"
                             print(f"[MCP Client] Tool call FAILED: {result_str}")
@@ -367,20 +487,20 @@ class MCPClient:
             text = f"Operation completed. Result: {last_tool_result}"
         if not text:
             text = "No response generated."
-        return contents, text
+        return contents, text, music_attachment
 
     async def run_tool_loop_anthropic(
         self,
         messages: list,
         system: str = SYSTEM_INSTRUCTION,
         max_iterations: int = 40,
-    ) -> tuple[list, str]:
+    ) -> tuple[list, str, Optional[Dict[str, Any]]]:
         """Run the Anthropic Claude <-> MCP tool-calling loop.
 
         messages: list of {"role": "user"|"assistant", "content": ...} in API format.
-        Returns (updated_messages, final_text_reply).
+        Returns (updated_messages, final_text_reply, optional generated_music dict).
         """
-        if self._anthropic_client is None or self.session is None:
+        if self._anthropic_client is None:
             raise RuntimeError("Anthropic client not configured or not connected")
 
         tools = await self._get_anthropic_tools()
@@ -388,6 +508,7 @@ class MCPClient:
             raise RuntimeError("No tools available for Anthropic")
 
         final_text = ""
+        music_attachment: Optional[Dict[str, Any]] = None
         for _ in range(max_iterations):
             response = await self._anthropic_client.messages.create(
                 model=self._anthropic_model,
@@ -426,8 +547,9 @@ class MCPClient:
                 tool_args = block.input if isinstance(block.input, dict) else {}
                 print(f"[MCP Client] Calling tool: {tool_name} with args: {tool_args}")
                 try:
-                    result = await self.session.call_tool(tool_name, tool_args)
-                    result_str = self._extract_tool_result(result)
+                    result_str, attach = await self._dispatch_tool(tool_name, tool_args)
+                    if attach is not None:
+                        music_attachment = attach
                 except Exception as e:
                     result_str = f"Error calling tool {tool_name}: {str(e)}"
                     print(f"[MCP Client] Tool call FAILED: {result_str}")
@@ -447,20 +569,20 @@ class MCPClient:
                     break
         if not final_text:
             final_text = "No response generated."
-        return messages, final_text
+        return messages, final_text, music_attachment
 
     async def run_tool_loop_openai(
         self,
         messages: list[dict],
         system: str = SYSTEM_INSTRUCTION,
         max_iterations: int = 40,
-    ) -> tuple[list[dict], str]:
+    ) -> tuple[list[dict], str, Optional[Dict[str, Any]]]:
         """Run the OpenAI chat completions <-> MCP tool-calling loop.
 
         messages: list of {"role": "user"|"assistant"|"system", "content": str} in API format.
-        Returns (updated_messages, final_text_reply).
+        Returns (updated_messages, final_text_reply, optional generated_music dict).
         """
-        if self._openai_client is None or self.session is None:
+        if self._openai_client is None:
             raise RuntimeError("OpenAI client not configured or not connected")
 
         tools = await self._get_openai_tools()
@@ -472,6 +594,7 @@ class MCPClient:
         request_messages.extend(messages)
 
         final_text = ""
+        music_attachment: Optional[Dict[str, Any]] = None
         for _ in range(max_iterations):
             response = await self._openai_client.chat.completions.create(
                 model=self._openai_model,
@@ -511,8 +634,9 @@ class MCPClient:
                     tool_args = {}
                 print(f"[MCP Client] Calling tool: {tool_name} with args: {tool_args}")
                 try:
-                    result = await self.session.call_tool(tool_name, tool_args)
-                    result_str = self._extract_tool_result(result)
+                    result_str, attach = await self._dispatch_tool(tool_name, tool_args)
+                    if attach is not None:
+                        music_attachment = attach
                 except Exception as e:
                     result_str = f"Error calling tool {tool_name}: {str(e)}"
                     print(f"[MCP Client] Tool call FAILED: {result_str}")
@@ -525,17 +649,19 @@ class MCPClient:
 
         if not final_text:
             final_text = "No response generated."
-        return request_messages, final_text
+        return request_messages, final_text, music_attachment
 
     async def run_llm_tool_loop(
         self,
         messages: list[dict],
         resolved_intent_hint: Optional[str] = None,
-    ) -> str:
-        """Provider-agnostic: run the appropriate LLM + MCP tool loop and return the reply.
+    ) -> tuple[str, Optional[Dict[str, Any]]]:
+        """Provider-agnostic: run the appropriate LLM + MCP tool loop.
 
         messages: list of {"role": "user"|"model", "content": str} (conversation history).
         resolved_intent_hint: optional hint from recommend-entity-for-style to prepend.
+
+        Returns (reply_text, generated_music dict or None).
         """
         if self._llm_provider == "anthropic":
             # Convert to Anthropic format: "model" -> "assistant", content as list of text blocks
@@ -552,8 +678,10 @@ class MCPClient:
                         f"{resolved_intent_hint}. Use this recommendation when deciding which entity to add."
                     ),
                 })
-            _, reply = await self.run_tool_loop_anthropic(api_messages, system=SYSTEM_INSTRUCTION)
-            return reply
+            _, reply, music = await self.run_tool_loop_anthropic(
+                api_messages, system=SYSTEM_INSTRUCTION
+            )
+            return reply, music
 
         if self._llm_provider == "openai":
             # Convert to OpenAI format: "model" -> "assistant"
@@ -569,8 +697,10 @@ class MCPClient:
                         f"{resolved_intent_hint}. Use this recommendation when deciding which entity to add."
                     ),
                 })
-            _, reply = await self.run_tool_loop_openai(api_messages, system=SYSTEM_INSTRUCTION)
-            return reply
+            _, reply, music = await self.run_tool_loop_openai(
+                api_messages, system=SYSTEM_INSTRUCTION
+            )
+            return reply, music
 
         # Gemini path
         tools = await self._get_gemini_tools()
@@ -594,8 +724,8 @@ class MCPClient:
                     role="user",
                 )
             )
-        _, reply = await self.run_tool_loop(contents, config)
-        return reply
+        _, reply, music = await self.run_tool_loop(contents, config)
+        return reply, music
 
     # ------------------------------------------------------------------
     # Public API
@@ -613,7 +743,8 @@ class MCPClient:
         """
         messages = list(history) if history else []
         messages.append({"role": "user", "content": query})
-        return await self.run_llm_tool_loop(messages)
+        reply, _ = await self.run_llm_tool_loop(messages)
+        return reply
 
     async def chat_loop(self):
         """Run an interactive chat loop (keeps conversation across turns)."""
@@ -628,7 +759,7 @@ class MCPClient:
                     break
 
                 messages.append({"role": "user", "content": query})
-                reply = await self.run_llm_tool_loop(messages)
+                reply, _ = await self.run_llm_tool_loop(messages)
                 messages.append({"role": "model", "content": reply})
                 print("\n" + reply)
             except Exception as e:

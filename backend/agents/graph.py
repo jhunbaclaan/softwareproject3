@@ -14,7 +14,7 @@ LangGraph StateGraph so that:
 from __future__ import annotations
 
 import re
-from typing import Any, Optional, Sequence, TypedDict
+from typing import Any, Dict, Optional, Sequence, TypedDict
 
 from langgraph.graph import END, StateGraph
 
@@ -35,6 +35,7 @@ class AgentState(TypedDict, total=False):
     current_query: str
     resolved_intent: Optional[str]
     reply: str
+    generated_music: Optional[Dict[str, Any]]
     mcp_client: Any
 
 
@@ -79,9 +80,11 @@ async def run_llm_tools(state: AgentState) -> dict:
     messages = list(state.get("messages") or [])
     resolved_intent = state.get("resolved_intent")
 
-    reply = await client.run_llm_tool_loop(messages, resolved_intent_hint=resolved_intent)
+    reply, generated_music = await client.run_llm_tool_loop(
+        messages, resolved_intent_hint=resolved_intent
+    )
     messages.append({"role": "model", "content": reply})
-    return {"messages": messages, "reply": reply}
+    return {"messages": messages, "reply": reply, "generated_music": generated_music}
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +138,7 @@ async def run_agent_graph(
     client: MCPClient,
     query: str,
     history: Optional[Sequence[dict[str, str]]] = None,
-) -> str:
+) -> tuple[str, Optional[Dict[str, Any]]]:
     """Run a single user turn through the LangGraph pipeline.
 
     Args:
@@ -144,15 +147,20 @@ async def run_agent_graph(
         history: Prior conversation turns (list of ``{role, content}`` dicts).
 
     Returns:
-        The agent's text reply.
+        ``(reply_text, generated_music_dict_or_none)`` — the latter is set when
+        the ElevenLabs agent tool produced audio in this turn.
     """
     initial_state: AgentState = {
         "messages": list(history) if history else [],
         "current_query": query,
         "resolved_intent": None,
         "reply": "",
+        "generated_music": None,
         "mcp_client": client,
     }
 
     result = await _COMPILED_GRAPH.ainvoke(initial_state)
-    return result.get("reply", "No response generated.")
+    return (
+        result.get("reply", "No response generated."),
+        result.get("generated_music"),
+    )

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { healthCheck, runAgent, generateMusic } from '../api';
+import { healthCheck, runAgent } from '../api';
 
 const MOCK_BASE_URL = 'http://test-server';
 
@@ -37,13 +37,4 @@ describe('Frontend API wrapper tests', () => {
     }));
   });
 
-  it('generateMusic error handling', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      json: async () => ({ detail: 'API Error text' })
-    } as Response);
-
-    await expect(generateMusic(MOCK_BASE_URL, { prompt: 'abc' })).rejects.toThrow('API Error text');
-  });
 });

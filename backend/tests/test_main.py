@@ -16,12 +16,15 @@ async def test_agent_run():
          patch("main.run_agent_graph") as mock_run:
         
         mock_ensure.return_value = AsyncMock() 
-        mock_run.return_value = "Agent reply"
+        mock_run.return_value = ("Agent reply", None)
 
         request_data = {"prompt": "add synth"}
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post("/agent/run", json=request_data)
-        
+
         assert response.status_code == 200
-        assert response.json() == {"reply": "Agent reply", "trace": None}
+        body = response.json()
+        assert body["reply"] == "Agent reply"
+        assert body.get("trace") is None
+        assert body.get("generated_music") is None
 

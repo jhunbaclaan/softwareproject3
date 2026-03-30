@@ -6,7 +6,7 @@ import os
 import logging
 from agents.mcp_client_new import MCPClient
 from agents.graph import run_agent_graph
-from models import TraceItem, AgentRequest, AgentResponse
+from models import AgentRequest, AgentResponse, GeneratedMusicAttachment
 from routes.music import router as music_router
 
 logger = logging.getLogger(__name__)
@@ -134,13 +134,17 @@ async def run_agent(request: AgentRequest) -> AgentResponse:
     """Process a user query through the LLM (Gemini or Anthropic) + MCP agent."""
     try:
         client = await _ensure_client(request)
+        client.set_elevenlabs_api_key(request.elevenlabsApiKey)
 
         history = None
         if request.messages:
             history = [{"role": m.role, "content": m.content} for m in request.messages]
 
-        reply = await run_agent_graph(client, request.prompt, history=history)
-        return AgentResponse(reply=reply, trace=None)
+        reply, raw_music = await run_agent_graph(client, request.prompt, history=history)
+        generated = (
+            GeneratedMusicAttachment(**raw_music) if raw_music else None
+        )
+        return AgentResponse(reply=reply, trace=None, generated_music=generated)
 
     except Exception as e:
         error_msg = f"Agent error: {str(e)}"

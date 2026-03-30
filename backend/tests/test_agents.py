@@ -15,12 +15,16 @@ def test_should_resolve_intent():
 @pytest.mark.asyncio
 async def test_run_agent_graph_no_intent_resolution():
     mock_client = AsyncMock(spec=MCPClient)
-    mock_client.run_llm_tool_loop.return_value = "Added beatbox8"
+    mock_client.run_llm_tool_loop.return_value = ("Added beatbox8", None)
 
-    reply = await run_agent_graph(mock_client, query="add a beatbox8", history=[])
-    
+    reply, music = await run_agent_graph(mock_client, query="add a beatbox8", history=[])
+
     assert reply == "Added beatbox8"
-    mock_client.run_llm_tool_loop.assert_called_once_with([{"role": "user", "content": "add a beatbox8"}, {"role": "model", "content": "Added beatbox8"}], resolved_intent_hint=None)
+    assert music is None
+    mock_client.run_llm_tool_loop.assert_called_once_with(
+        [{"role": "user", "content": "add a beatbox8"}],
+        resolved_intent_hint=None,
+    )
 
 @pytest.mark.asyncio
 async def test_run_agent_graph_with_intent_resolution():
@@ -30,14 +34,20 @@ async def test_run_agent_graph_with_intent_resolution():
     mock_client.session = mock_session
     mock_session.call_tool.return_value = "Mocked Result: Use machiniste"
     mock_client._extract_tool_result = lambda x: x # pass through fake result string
-    
-    mock_client.run_llm_tool_loop.return_value = "Created machiniste"
 
-    reply = await run_agent_graph(mock_client, query="make a drum beat in the style of Daft Punk", history=[])
-    
+    mock_client.run_llm_tool_loop.return_value = ("Created machiniste", None)
+
+    reply, music = await run_agent_graph(
+        mock_client, query="make a drum beat in the style of Daft Punk", history=[]
+    )
+
     assert reply == "Created machiniste"
-    mock_session.call_tool.assert_called_once_with("recommend-entity-for-style", {"description": "make a drum beat in the style of Daft Punk"})
+    assert music is None
+    mock_session.call_tool.assert_called_once_with(
+        "recommend-entity-for-style",
+        {"description": "make a drum beat in the style of Daft Punk"},
+    )
     mock_client.run_llm_tool_loop.assert_called_once_with(
-        [{"role": "user", "content": "make a drum beat in the style of Daft Punk"}, {"role": "model", "content": "Created machiniste"}],
-        resolved_intent_hint="Mocked Result: Use machiniste"
+        [{"role": "user", "content": "make a drum beat in the style of Daft Punk"}],
+        resolved_intent_hint="Mocked Result: Use machiniste",
     )

@@ -7,7 +7,7 @@ import {
   type SyncedDocument,
 } from '@audiotool/nexus';
 import './App.css';
-import { runAgent, generateMusic, type AuthTokens, type ConversationMessage, type LLMProvider } from './api';
+import { runAgent, type AuthTokens, type ConversationMessage, type LLMProvider } from './api';
 import { importAudioBlobToProject } from './audiotool/importGeneratedAudio';
 
 type Role = 'user' | 'assistant';
@@ -101,13 +101,9 @@ const extractAuthTokens = (clientId: string, redirectUrl: string, scope: string)
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
-  const [musicExpanded, setMusicExpanded] = useState(false);
-  const [musicPrompt, setMusicPrompt] = useState('');
-  const [musicGenerating, setMusicGenerating] = useState(false);
-  const [musicAudioUrl, setMusicAudioUrl] = useState<string | null>(null);
-  const [musicError, setMusicError] = useState<string | null>(null);
-  const [musicDawMessage, setMusicDawMessage] = useState<string | null>(null);
-  const [musicDawError, setMusicDawError] = useState<string | null>(null);
+  const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
+  const [previewDawMessage, setPreviewDawMessage] = useState<string | null>(null);
+  const [previewDawError, setPreviewDawError] = useState<string | null>(null);
   const audioImportLayoutRef = useRef(0);
   const [isRunning, setIsRunning] = useState(false);
   const authConfig = {
@@ -579,6 +575,13 @@ export default function App() {
       return;
     }
 
+    if (previewAudioUrl) {
+      URL.revokeObjectURL(previewAudioUrl);
+      setPreviewAudioUrl(null);
+    }
+    setPreviewDawMessage(null);
+    setPreviewDawError(null);
+
     setIsRunning(true);
     addMessage('user', trimmed);
     setInput('');
@@ -612,8 +615,43 @@ export default function App() {
         messages: history.length > 0 ? history : undefined,
         llmProvider,
         llmApiKey: llmApiKey.trim() || undefined,
+        elevenlabsApiKey: elevenLabsApiKey.trim() || undefined,
       });
       addMessage('assistant', response.reply);
+
+      const gm = response.generated_music;
+      if (gm?.audio_base64) {
+        const blob = new Blob(
+          [Uint8Array.from(atob(gm.audio_base64), (c) => c.charCodeAt(0))],
+          { type: 'audio/mpeg' },
+        );
+        const url = URL.createObjectURL(blob);
+        setPreviewAudioUrl(url);
+
+        const durationMs = gm.music_length_ms ?? 15000;
+        if (client && syncedDocument && projectStatus === 'connected') {
+          setPreviewDawMessage('Uploading sample and adding to timeline…');
+          try {
+            const idx = audioImportLayoutRef.current++;
+            await importAudioBlobToProject(client, syncedDocument, blob, {
+              displayName: `ElevenLabs: ${gm.prompt.slice(0, 80)}`,
+              durationMs,
+              layoutIndex: idx,
+            });
+            setPreviewDawMessage('Added to your Audiotool project (audio track + region).');
+            setPreviewDawError(null);
+          } catch (dawErr) {
+            setPreviewDawMessage(null);
+            setPreviewDawError(
+              `Could not add to DAW: ${formatError(dawErr)}. The preview below still plays locally.`,
+            );
+          }
+        } else {
+          setPreviewDawMessage(
+            'Connect an Audiotool project (sidebar) to place this clip on the timeline automatically.',
+          );
+        }
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       addMessage('assistant', `Error: ${message}`);
@@ -624,64 +662,6 @@ export default function App() {
 
   const handleReset = () => {
     setMessages([]);
-  };
-
-  const handleGenerateMusic = async () => {
-    const trimmed = musicPrompt.trim();
-    if (!trimmed || musicGenerating) return;
-
-    const musicLengthMs = 15000;
-
-    setMusicGenerating(true);
-    setMusicError(null);
-    setMusicDawMessage(null);
-    setMusicDawError(null);
-    if (musicAudioUrl) {
-      URL.revokeObjectURL(musicAudioUrl);
-      setMusicAudioUrl(null);
-    }
-
-    try {
-      const result = await generateMusic('http://127.0.0.1:8000', {
-        prompt: trimmed,
-        music_length_ms: musicLengthMs,
-        force_instrumental: true,
-        elevenlabs_api_key: elevenLabsApiKey.trim() || undefined,
-      });
-      const blob = new Blob(
-        [Uint8Array.from(atob(result.audio_base64), (c) => c.charCodeAt(0))],
-        { type: 'audio/mpeg' }
-      );
-      const url = URL.createObjectURL(blob);
-      setMusicAudioUrl(url);
-
-      if (client && syncedDocument && projectStatus === 'connected') {
-        setMusicDawMessage('Uploading sample and adding to timeline…');
-        try {
-          const idx = audioImportLayoutRef.current++;
-          await importAudioBlobToProject(client, syncedDocument, blob, {
-            displayName: `ElevenLabs: ${trimmed.slice(0, 80)}`,
-            durationMs: musicLengthMs,
-            layoutIndex: idx,
-          });
-          setMusicDawMessage('Added to your Audiotool project (audio track + region).');
-          setMusicDawError(null);
-        } catch (dawErr) {
-          setMusicDawMessage(null);
-          setMusicDawError(
-            `Could not add to DAW: ${formatError(dawErr)}. The preview above still plays locally.`,
-          );
-        }
-      } else {
-        setMusicDawMessage(
-          'Connect an Audiotool project (sidebar) to place this clip on the project timeline automatically.',
-        );
-      }
-    } catch (err) {
-      setMusicError(formatError(err));
-    } finally {
-      setMusicGenerating(false);
-    }
   };
 
   const authPillClass = `status-pill ${authStatus?.loggedIn ? 'ok' : 'warn'}`;
@@ -873,8 +853,9 @@ export default function App() {
               {messages.length === 0 ? (
                 <div className="empty">
                   <p>
-                    Start the conversation by sending a message. You can paste ABC notation or ask the agent to add it as a
-                    track.
+                    Start the conversation by sending a message. You can paste ABC notation, ask the agent to add
+                    instruments, or describe music you want generated (ElevenLabs)—for example: &quot;Generate 15 seconds of
+                    chill lo-fi beats, instrumental.&quot;
                   </p>
                 </div>
               ) : (
@@ -890,6 +871,16 @@ export default function App() {
               )}
             </div>
 
+            {previewAudioUrl && (
+              <div className="music-generate-section music-agent-preview" role="region" aria-label="Generated music preview">
+                {previewDawMessage && <p className="music-daw-status">{previewDawMessage}</p>}
+                {previewDawError && <p className="music-error">{previewDawError}</p>}
+                <div className="music-player">
+                  <audio controls src={previewAudioUrl} />
+                </div>
+              </div>
+            )}
+
             <form
               className="composer"
               onSubmit={(event) => {
@@ -897,46 +888,6 @@ export default function App() {
                 handleSend();
               }}
             >
-              <div className="abc-input-section">
-                <button
-                  type="button"
-                  className="abc-toggle"
-                  onClick={() => setMusicExpanded(!musicExpanded)}
-                  aria-expanded={musicExpanded}
-                  aria-label={musicExpanded ? 'Collapse music generation' : 'Expand music generation'}
-                >
-                  {musicExpanded ? '−' : '+'} Generate music (ElevenLabs)
-                </button>
-                {musicExpanded && (
-                  <div className="music-generate-section">
-                    <textarea
-                      value={musicPrompt}
-                      onChange={(e) => setMusicPrompt(e.target.value)}
-                      placeholder="e.g. Upbeat jazz with piano and drums, 120 BPM"
-                      className="abc-textarea"
-                      rows={2}
-                      aria-label="Music generation prompt"
-                      disabled={musicGenerating}
-                    />
-                    <button
-                      type="button"
-                      className="ghost small"
-                      onClick={handleGenerateMusic}
-                      disabled={!musicPrompt.trim() || musicGenerating}
-                    >
-                      {musicGenerating ? 'Generating...' : 'Generate'}
-                    </button>
-                    {musicError && <p className="music-error">{musicError}</p>}
-                    {musicDawMessage && <p className="music-daw-status">{musicDawMessage}</p>}
-                    {musicDawError && <p className="music-error">{musicDawError}</p>}
-                    {musicAudioUrl && (
-                      <div className="music-player">
-                        <audio controls src={musicAudioUrl} />
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
               <input
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
@@ -1209,9 +1160,9 @@ export default function App() {
                     type="password"
                     value={elevenLabsApiKey}
                     onChange={(e) => setElevenLabsApiKey(e.target.value)}
-                    placeholder="Enter ElevenLabs API key"
+                    placeholder="For agent-generated music; uses ELEVENLABS_API_KEY if empty"
                     className="font-size-input"
-                    aria-label="ElevenLabs API key"
+                    aria-label="ElevenLabs API key for music generation in chat"
                     autoComplete="off"
                   />
                 </div>
