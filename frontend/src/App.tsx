@@ -1096,34 +1096,6 @@ export default function App() {
               <div className="settings-section">
                 <h4>Developer Settings</h4>
                 <div className="setting-item">
-                  <span className="setting-label">DevSetting1</span>
-                  <div
-                    className="toggle-switch"
-                    role="switch"
-                    aria-checked="false"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                      }
-                    }}
-                  />
-                </div>
-                <div className="setting-item">
-                  <span className="setting-label">DevSetting2</span>
-                  <div
-                    className="toggle-switch"
-                    role="switch"
-                    aria-checked="false"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                      }
-                    }}
-                  />
-                </div>
-                <div className="setting-item">
                   <span className="setting-label">Provider</span>
                   <select
                     value={llmProvider}
