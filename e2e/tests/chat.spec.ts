@@ -19,7 +19,7 @@ test.describe('Nexus Agent Chat Interface', () => {
     await page.goto('/');
 
     // Look for the main chat interface
-    const chatInput = page.locator('input[placeholder*="Type your message"]');
+    const chatInput = page.getByRole('textbox', { name: 'Chat message' });
     await expect(chatInput).toBeVisible();
 
     // Type a message

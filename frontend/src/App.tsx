@@ -101,8 +101,6 @@ const extractAuthTokens = (clientId: string, redirectUrl: string, scope: string)
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
-  const [abcInput, setAbcInput] = useState('');
-  const [abcExpanded, setAbcExpanded] = useState(false);
   const [musicExpanded, setMusicExpanded] = useState(false);
   const [musicPrompt, setMusicPrompt] = useState('');
   const [musicGenerating, setMusicGenerating] = useState(false);
@@ -216,7 +214,7 @@ export default function App() {
 
   const tutorialSteps = [
     { title: 'Console', text: 'This is the console where you can log in and manage your projects.' },
-    { title: 'Chat Box', text: 'This is the chat box where you can interact with the agent and generate music.' },
+    { title: 'Chat Box', text: 'This is the chat box where you can talk to the agent, paste ABC notation, or ask for music.' },
     { title: 'Settings Cogwheel', text: 'This is the settings cogwheel to customize your experience.' }
   ];
 
@@ -577,19 +575,13 @@ export default function App() {
 
   const handleSend = async () => {
     const trimmed = input.trim();
-    const abcTrimmed = abcInput.trim();
-    if ((!trimmed && !abcTrimmed) || isRunning) {
+    if (!trimmed || isRunning) {
       return;
     }
 
-    const userContent = abcTrimmed
-      ? `Add this ABC notation as a track:\n\n\`\`\`\n${abcTrimmed}\n\`\`\`\n\n${trimmed || 'Add it to the project.'}`
-      : trimmed;
-
     setIsRunning(true);
-    addMessage('user', userContent);
+    addMessage('user', trimmed);
     setInput('');
-    if (abcTrimmed) setAbcInput('');
 
     try {
       const authTokens = authStatus?.loggedIn
@@ -612,7 +604,7 @@ export default function App() {
         }));
 
       const response = await runAgent('http://127.0.0.1:8000', {
-        prompt: userContent,
+        prompt: trimmed,
         keywords: [],
         loop: 1,
         authTokens: authTokens || undefined,
@@ -880,7 +872,10 @@ export default function App() {
             <div className="messages" ref={messagesContainerRef}>
               {messages.length === 0 ? (
                 <div className="empty">
-                  <p>Start the conversation by sending a message.</p>
+                  <p>
+                    Start the conversation by sending a message. You can paste ABC notation or ask the agent to add it as a
+                    track.
+                  </p>
                 </div>
               ) : (
                 messages.map((message) => (
@@ -902,27 +897,6 @@ export default function App() {
                 handleSend();
               }}
             >
-              <div className="abc-input-section">
-                <button
-                  type="button"
-                  className="abc-toggle"
-                  onClick={() => setAbcExpanded(!abcExpanded)}
-                  aria-expanded={abcExpanded}
-                  aria-label={abcExpanded ? 'Collapse ABC input' : 'Expand ABC notation input'}
-                >
-                  {abcExpanded ? '−' : '+'} ABC notation
-                </button>
-                {abcExpanded && (
-                  <textarea
-                    value={abcInput}
-                    onChange={(e) => setAbcInput(e.target.value)}
-                    placeholder={'X:1\nK:C\nL:1/4\nCDEF GABc|'}
-                    className="abc-textarea"
-                    rows={5}
-                    aria-label="ABC notation"
-                  />
-                )}
-              </div>
               <div className="abc-input-section">
                 <button
                   type="button"
@@ -969,7 +943,7 @@ export default function App() {
                 placeholder="Type your message..."
                 aria-label="Chat message"
               />
-              <button type="submit" disabled={(!input.trim() && !abcInput.trim()) || isRunning}>
+              <button type="submit" disabled={!input.trim() || isRunning}>
                 {isRunning ? 'Sending...' : 'Send'}
               </button>
             </form>

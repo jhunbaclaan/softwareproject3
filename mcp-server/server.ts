@@ -114,7 +114,10 @@ const INSTRUMENT_ALIASES: Record<string, string> = {
   "808": "beatbox8",
   "909": "beatbox9",
   modular: "pulverisateur",
-  fm: "pulsar"
+  fm: "pulsar",
+  piano: "gakki",
+  pianoforte: "gakki",
+  "acoustic piano": "gakki",
 };
 
 /** Audiotool ticks: 1 whole note = 15360, 1 quarter = 3840 */
@@ -240,6 +243,8 @@ const GAKKI_NAME_SYNONYMS: Record<string, string> = {
   string: "string_ensemble_1",
   orchestral: "string_ensemble_1",
   symphonic: "string_ensemble_1",
+  piano: "acoustic_grand_piano",
+  pianoforte: "acoustic_grand_piano",
 };
 
 /**
@@ -281,6 +286,8 @@ const GAKKI_TEXT_PATTERNS: ReadonlyArray<{ pattern: RegExp; gmKey: string }> = [
   { pattern: /\bhorn\b/i, gmKey: "french_horn" },
   { pattern: /\bbrass\b/i, gmKey: "brass_section" },
   { pattern: /\bstrings\b/i, gmKey: "string_ensemble_1" },
+  { pattern: /\bacoustic\s+grand\s+piano\b/i, gmKey: "acoustic_grand_piano" },
+  { pattern: /\bpiano\b/i, gmKey: "acoustic_grand_piano" },
 ];
 
 function resolveGakkiPresetUuidFromHints(args: {
@@ -801,7 +808,7 @@ server.registerTool(
       "Parses the ABC string, creates an instrument (or uses an existing note-playing device),",
       "creates a NoteTrack, NoteCollection, NoteRegion, and adds all notes. Call this when the user",
       "provides music in ABC notation (e.g. X:1, K:C, L:1/4, CDEF GABc|).",
-      "Orchestral: use instrument=french horn (etc.) or orchestralVoice; do not use instrument=gakki alone (defaults to piano).",
+      "When instrument is omitted, acoustic grand piano (Gakki) is used. Orchestral: use instrument=french horn (etc.) or orchestralVoice.",
       "Other instruments: heisenberg, bassline, pulsar, kobolt, space, gakki, ",
       "pulverisateur, tonematrix, machiniste, beatbox8, beatbox9, matrixArpeggiator, etc.",
     ].join(" "),
@@ -813,7 +820,7 @@ server.registerTool(
         .string()
         .optional()
         .describe(
-          "Sound/device for the note player. Prefer the user's exact instrument (e.g. french horn, trumpet, violin)—not the word gakki alone, which defaults to piano. Aliases: heisenberg, bassline, space, gakki, pulverisateur, tonematrix, machiniste, matrixArpeggiator, synth, bass, strings, drums, brass, horn, etc. Default: heisenberg.",
+          "Sound/device for the note player. Prefer the user's exact instrument (e.g. french horn, trumpet, violin). Aliases: heisenberg, bassline, space, gakki, pulverisateur, tonematrix, machiniste, matrixArpeggiator, synth, bass, strings, drums, brass, horn, piano, etc. Default: acoustic grand piano (Gakki).",
         ),
       orchestralVoice: z
         .string()
@@ -847,17 +854,23 @@ server.registerTool(
 
       const doc = await getDocument();
 
+      const DEFAULT_ABC_INSTRUMENT = "gakki";
       const instrumentType =
-        resolveInstrumentType(args.instrument ?? "heisenberg") ?? "heisenberg";
+        resolveInstrumentType(
+          args.instrument?.trim() ?? DEFAULT_ABC_INSTRUMENT,
+        ) ?? DEFAULT_ABC_INSTRUMENT;
 
-      // Gakki: applyPresetTo with preset from API; bare "gakki" has no UUID → default piano without hints.
+      // Gakki: applyPresetTo with preset from hints, else acoustic grand piano.
       let gakkiPreset: unknown | undefined = undefined;
       if (!args.playerEntityId && instrumentType === "gakki") {
-        const presetUuid = resolveGakkiPresetUuidFromHints({
+        let presetUuid = resolveGakkiPresetUuidFromHints({
           instrument: args.instrument,
           orchestralVoice: args.orchestralVoice,
           abcNotation: args.abcNotation,
         });
+        if (!presetUuid) {
+          presetUuid = gakkiByGmName.acoustic_grand_piano;
+        }
         if (presetUuid) {
           const client = await getClient();
           gakkiPreset = await client.api.presets.get(
@@ -865,7 +878,7 @@ server.registerTool(
           );
         } else {
           console.error(
-            "[add-abc-track] Gakki device but no preset UUID (instrument=%s orchestralVoice=%s). Default patch may be piano.",
+            "[add-abc-track] Gakki device but no preset UUID (gakki map empty? instrument=%s orchestralVoice=%s).",
             args.instrument ?? "",
             args.orchestralVoice ?? "",
           );
