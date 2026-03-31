@@ -37,6 +37,7 @@ class AgentState(TypedDict, total=False):
     reply: str
     generated_music: Optional[Dict[str, Any]]
     mcp_client: Any
+    daw_context: Optional[Dict[str, Any]]
 
 
 # ---------------------------------------------------------------------------
@@ -79,9 +80,10 @@ async def run_llm_tools(state: AgentState) -> dict:
     client: MCPClient = state["mcp_client"]
     messages = list(state.get("messages") or [])
     resolved_intent = state.get("resolved_intent")
+    daw_context = state.get("daw_context")
 
     reply, generated_music = await client.run_llm_tool_loop(
-        messages, resolved_intent_hint=resolved_intent
+        messages, resolved_intent_hint=resolved_intent, daw_context=daw_context
     )
     messages.append({"role": "model", "content": reply})
     return {"messages": messages, "reply": reply, "generated_music": generated_music}
@@ -138,6 +140,7 @@ async def run_agent_graph(
     client: MCPClient,
     query: str,
     history: Optional[Sequence[dict[str, str]]] = None,
+    daw_context: Optional[Dict[str, Any]] = None,
 ) -> tuple[str, Optional[Dict[str, Any]]]:
     """Run a single user turn through the LangGraph pipeline.
 
@@ -145,6 +148,7 @@ async def run_agent_graph(
         client: An already-connected MCPClient.
         query: The current user message.
         history: Prior conversation turns (list of ``{role, content}`` dicts).
+        daw_context: Optional dict with DAW project settings (tempoBpm, timeSignature).
 
     Returns:
         ``(reply_text, generated_music_dict_or_none)`` — the latter is set when
@@ -157,6 +161,7 @@ async def run_agent_graph(
         "reply": "",
         "generated_music": None,
         "mcp_client": client,
+        "daw_context": daw_context,
     }
 
     result = await _COMPILED_GRAPH.ainvoke(initial_state)

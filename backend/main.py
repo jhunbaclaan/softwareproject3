@@ -140,7 +140,13 @@ async def run_agent(request: AgentRequest) -> AgentResponse:
         if request.messages:
             history = [{"role": m.role, "content": m.content} for m in request.messages]
 
-        reply, raw_music = await run_agent_graph(client, request.prompt, history=history)
+        daw_context = None
+        if request.dawContext:
+            daw_context = request.dawContext.model_dump(exclude_none=True) or None
+
+        reply, raw_music = await run_agent_graph(
+            client, request.prompt, history=history, daw_context=daw_context
+        )
         generated = (
             GeneratedMusicAttachment(**raw_music) if raw_music else None
         )

@@ -7,7 +7,7 @@ import {
   type SyncedDocument,
 } from '@audiotool/nexus';
 import './App.css';
-import { runAgent, type AuthTokens, type ConversationMessage, type LLMProvider } from './api';
+import { runAgent, type AuthTokens, type ConversationMessage, type DawContext, type LLMProvider } from './api';
 import { importAudioBlobToProject } from './audiotool/importGeneratedAudio';
 
 type Role = 'user' | 'assistant';
@@ -97,6 +97,24 @@ const extractAuthTokens = (clientId: string, redirectUrl: string, scope: string)
     scope,
   };
 };
+
+function getDawContext(doc: SyncedDocument | null): DawContext | undefined {
+  if (!doc) return undefined;
+  try {
+    const allEntities = (doc as any).queryEntities?.get?.() ?? [];
+    const config = allEntities.find((e: any) => e.entityType === 'config');
+    if (!config) return undefined;
+    const bpm = config.fields?.tempoBpm?.value as number | undefined;
+    const num = config.fields?.signatureNumerator?.value as number | undefined;
+    const den = config.fields?.signatureDenominator?.value as number | undefined;
+    const ctx: DawContext = {};
+    if (bpm != null) ctx.tempoBpm = bpm;
+    if (num != null && den != null) ctx.timeSignature = `${num}/${den}`;
+    return Object.keys(ctx).length > 0 ? ctx : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -606,6 +624,8 @@ export default function App() {
           content: m.content,
         }));
 
+      const dawContext = getDawContext(syncedDocument);
+
       const response = await runAgent('http://127.0.0.1:8000', {
         prompt: trimmed,
         keywords: [],
@@ -616,6 +636,7 @@ export default function App() {
         llmProvider,
         llmApiKey: llmApiKey.trim() || undefined,
         elevenlabsApiKey: elevenLabsApiKey.trim() || undefined,
+        dawContext,
       });
       addMessage('assistant', response.reply);
 

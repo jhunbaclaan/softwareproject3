@@ -23,6 +23,12 @@ class ConversationMessage(BaseModel):
     content: str
 
 
+class DawContext(BaseModel):
+    """Snapshot of the connected DAW project's musical settings."""
+    tempoBpm: Optional[float] = None
+    timeSignature: Optional[str] = None
+
+
 class AgentRequest(BaseModel):
     prompt: str
     keywords: List[str] = []
@@ -33,6 +39,7 @@ class AgentRequest(BaseModel):
     llmProvider: Literal["gemini", "anthropic", "openai"] = "gemini"
     llmApiKey: Optional[str] = None
     elevenlabsApiKey: Optional[str] = None
+    dawContext: Optional[DawContext] = None
 
 
 class GeneratedMusicAttachment(BaseModel):

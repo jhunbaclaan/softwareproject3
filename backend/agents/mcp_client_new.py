@@ -651,18 +651,46 @@ class MCPClient:
             final_text = "No response generated."
         return request_messages, final_text, music_attachment
 
+    @staticmethod
+    def _build_daw_context_hint(daw_context: Optional[Dict[str, Any]]) -> Optional[str]:
+        """Format DAW context into a hint string for the LLM, or None if empty."""
+        if not daw_context:
+            return None
+        parts = []
+        if "tempoBpm" in daw_context:
+            parts.append(f"Tempo: {daw_context['tempoBpm']} BPM")
+        if "timeSignature" in daw_context:
+            parts.append(f"Time signature: {daw_context['timeSignature']}")
+        if not parts:
+            return None
+        return (
+            "[DAW project context] The user's current project has the following settings: "
+            + ", ".join(parts) + ". "
+            "Only incorporate these details into the generate-music-elevenlabs prompt when "
+            "the user explicitly wants the generated sample to match or fit their project. "
+            "If the user just asks for a general sample without mentioning matching the project, "
+            "ignore this context and use only their description. "
+            "When the user wants a matching sample, tell them what you already know from the project "
+            "(BPM, time signature) and suggest they provide additional details like key, genre, mood, "
+            "or instruments to help the sample fit better—unless they already included those details."
+        )
+
     async def run_llm_tool_loop(
         self,
         messages: list[dict],
         resolved_intent_hint: Optional[str] = None,
+        daw_context: Optional[Dict[str, Any]] = None,
     ) -> tuple[str, Optional[Dict[str, Any]]]:
         """Provider-agnostic: run the appropriate LLM + MCP tool loop.
 
         messages: list of {"role": "user"|"model", "content": str} (conversation history).
         resolved_intent_hint: optional hint from recommend-entity-for-style to prepend.
+        daw_context: optional dict with DAW project settings (tempoBpm, timeSignature).
 
         Returns (reply_text, generated_music dict or None).
         """
+        daw_hint = self._build_daw_context_hint(daw_context)
+
         if self._llm_provider == "anthropic":
             # Convert to Anthropic format: "model" -> "assistant", content as list of text blocks
             api_messages = []
@@ -678,6 +706,8 @@ class MCPClient:
                         f"{resolved_intent_hint}. Use this recommendation when deciding which entity to add."
                     ),
                 })
+            if daw_hint:
+                api_messages.append({"role": "user", "content": daw_hint})
             _, reply, music = await self.run_tool_loop_anthropic(
                 api_messages, system=SYSTEM_INSTRUCTION
             )
@@ -697,6 +727,8 @@ class MCPClient:
                         f"{resolved_intent_hint}. Use this recommendation when deciding which entity to add."
                     ),
                 })
+            if daw_hint:
+                api_messages.append({"role": "user", "content": daw_hint})
             _, reply, music = await self.run_tool_loop_openai(
                 api_messages, system=SYSTEM_INSTRUCTION
             )
@@ -721,6 +753,13 @@ class MCPClient:
                         text=f"[system hint] The recommend-entity-for-style tool returned: "
                         f"{resolved_intent_hint}. Use this recommendation when deciding which entity to add."
                     )],
+                    role="user",
+                )
+            )
+        if daw_hint:
+            contents.append(
+                types.Content(
+                    parts=[types.Part.from_text(text=daw_hint)],
                     role="user",
                 )
             )

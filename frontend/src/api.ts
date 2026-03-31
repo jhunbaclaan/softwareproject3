@@ -16,6 +16,11 @@ export type ConversationMessage = {
 
 export type LLMProvider = 'gemini' | 'anthropic' | 'openai';
 
+export type DawContext = {
+  tempoBpm?: number;
+  timeSignature?: string;
+};
+
 export type AgentRequest = {
   prompt: string;
   keywords: string[];
@@ -27,6 +32,8 @@ export type AgentRequest = {
   llmApiKey?: string;
   /** Used when the agent calls ElevenLabs music generation */
   elevenlabsApiKey?: string;
+  /** Current DAW project state for context-aware sample generation */
+  dawContext?: DawContext;
 };
 
 export type GeneratedMusicPayload = {
