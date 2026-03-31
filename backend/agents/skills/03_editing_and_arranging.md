@@ -15,8 +15,9 @@ When the user asks to organize, arrange, sort, or clean up entities:
    Row 2 (y=500): sequencers — tonematrix
    Row 3 (y=750): effects — stompboxDelay
 3. Space entities horizontally 300px apart starting at x=0 for each row.
-4. Call `update-entity-position` for EVERY entity.
-5. Summarize the new layout.
+4. Calculate the new X and Y for every entity and compile them into a single array.
+5. Call `update-entity-positions` EXACTLY ONCE with the array of all positional updates to move them simultaneously.
+6. Summarize the new layout.
 
 To delete unused or unwanted devices, use `remove-entity`.
 

@@ -13,5 +13,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/tests/setup.ts'],
     globals: true,
+    reporters: ['default', 'junit'],
+    outputFile: { junit: '../test-results/frontend-junit.xml' },
   },
 });

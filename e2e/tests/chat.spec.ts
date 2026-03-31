@@ -1,30 +1,32 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Nexus Agent Chat Interface', () => {
-  // @ts-ignore
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem('tutorialCompleted', 'true');
+    });
+  });
+
   test('should allow user to enter an agent prompt', async ({ page }) => {
-    // Note: To successfully run this locally, backend and frontend must be running.
-    // We are testing whether the DOM updates when we attempt to interact.
-    
-    // Catch fetch to prevent real API calls from breaking the test
-    // @ts-ignore
+    // Mock the /agent/run SSE endpoint
     await page.route('**/agent/run', async route => {
+      const sseBody = `data: ${JSON.stringify({ type: 'reply', data: { reply: 'I am a simulated agent response.' } })}\n\n`;
       await route.fulfill({
         status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ reply: 'I am a simulated agent response.' }),
+        contentType: 'text/event-stream',
+        body: sseBody,
       });
     });
 
     await page.goto('/');
 
     // Look for the main chat interface
-    const chatInput = page.getByRole('textbox', { name: 'Chat message' });
+    const chatInput = page.getByLabel('Chat message');
     await expect(chatInput).toBeVisible();
 
     // Type a message
     await chatInput.fill('Please add a drum beat.');
-    
+
     // Press Enter to submit
     await chatInput.press('Enter');
 

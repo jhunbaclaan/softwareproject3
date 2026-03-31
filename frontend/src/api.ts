@@ -30,9 +30,7 @@ export type AgentRequest = {
   messages?: ConversationMessage[];
   llmProvider?: LLMProvider;
   llmApiKey?: string;
-  /** Used when the agent calls ElevenLabs music generation */
   elevenlabsApiKey?: string;
-  /** Current DAW project state for context-aware sample generation */
   dawContext?: DawContext;
 };
 
@@ -43,9 +41,16 @@ export type GeneratedMusicPayload = {
   music_length_ms?: number;
 };
 
+export type TraceItem = {
+  id: string;
+  label: string;
+  detail: string;
+  status: 'pending' | 'running' | 'done' | 'error';
+};
+
 export type AgentResponse = {
   reply: string;
-  trace?: Array<{ id: string; label: string; detail: string; status: 'pending' | 'running' | 'done' | 'error' }>;
+  trace?: TraceItem[];
   generated_music?: GeneratedMusicPayload | null;
 };
 
@@ -75,3 +80,51 @@ export async function runAgent(baseUrl: string, payload: AgentRequest): Promise<
   return res.json();
 }
 
+export async function runAgentStream(
+  baseUrl: string,
+  payload: AgentRequest,
+  onEvent: (event: any) => void | Promise<void>,
+): Promise<void> {
+  const res = await fetch(`${baseUrl}/agent/run`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Agent run failed (${res.status})`);
+  }
+
+  if (!res.body) throw new Error('No response body');
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const dataStr = line.slice(6);
+        try {
+          const event = JSON.parse(dataStr);
+          await onEvent(event);
+        } catch (e) {
+          if (e instanceof SyntaxError) {
+            console.error('Failed to parse SSE JSON:', dataStr);
+          } else {
+            console.error('Error in SSE event handler:', e);
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,29 +1,32 @@
 // required imports
-import { readFileSync } from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import abcjs from "abcjs";
 import {
   getLoginStatus,
   createAudiotoolClient,
   SyncedDocument,
 } from "@audiotool/nexus";
 import { TokenManager } from "./token-manager.js";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-/** Gakki preset UUIDs by GM instrument name (lowercase, underscores). Loaded from gakki-instruments.json. */
-let gakkiByGmName: Record<string, string> = {};
-try {
-  const gakkiPath = join(__dirname, "..", "gakki-instruments.json");
-  const data = JSON.parse(readFileSync(gakkiPath, "utf-8"));
-  gakkiByGmName = data.by_gm_name ?? {};
-} catch {
-  // Fallback if file missing; Gakki will use default preset
-}
+import {
+  VALID_ENTITY_TYPES,
+  ENTITY_TYPE_ALIASES,
+  NOTE_TRACK_INSTRUMENTS,
+  INSTRUMENT_ALIASES,
+  AUDIO_OUTPUT_FIELD,
+  TICKS_WHOLE,
+  TICKS_QUARTER,
+  STYLE_MAP,
+  levenshtein,
+  resolveEntityType,
+  resolveInstrumentType,
+  resolveGakkiPresetUuid,
+  resolveGakkiPresetUuidFromHints,
+  parseAbcToNotes,
+  connectDeviceToStagebox,
+  setHeisenbergOperatorAGain,
+  recommendEntityForStyle,
+} from "./server-utils.js";
 
 // creating server instance
 const server = new McpServer({
@@ -39,385 +42,6 @@ let tokenManager: TokenManager | null = null;
 
 // auto-layout counter so entities placed without coordinates don't stack
 let autoLayoutOffset = 0;
-
-const VALID_ENTITY_TYPES = [
-  "audioMerger", "audioSplitter", "autoFilter", "bandSplitter",
-  "bassline", "beatbox8", "beatbox9", "centroid", "crossfader", "curve", "exciter",
-  "gakki", "graphicalEQ", "gravity", "heisenberg", "helmholtz", "kobolt", "machiniste",
-  "matrixArpeggiator", "minimixer", "noteSplitter", "panorama", "pulsar", "pulverisateur",
-  "quantum", "quasar", "rasselbock", "ringModulator", "space", "stereoEnhancer",
-  "stompboxChorus", "stompboxCompressor", "stompboxCrusher", "stompboxDelay",
-  "stompboxFlanger", "stompboxGate", "stompboxParametricEqualizer", "stompboxPhaser",
-  "stompboxPitchDelay", "stompboxReverb", "stompboxSlope", "stompboxStereoDetune",
-  "stompboxTube", "tinyGain", "tonematrix", "waveshaper", "notetrack",
-  "mixerChannel", "mixerMaster", "mixerGroup", "mixerAux", "mixerReverbAux", "mixerDelayAux"
-] as const;
-
-const ENTITY_TYPE_ALIASES: Record<string, string> = {
-  machinedrum: "machiniste",
-  "drum machine": "machiniste",
-  drummachine: "machiniste",
-  "808": "beatbox8",
-  "909": "beatbox9",
-  chorus: "stompboxChorus",
-  compressor: "stompboxCompressor",
-  crusher: "stompboxCrusher",
-  delay: "stompboxDelay",
-  flanger: "stompboxFlanger",
-  gate: "stompboxGate",
-  eq: "graphicalEQ",
-  phaser: "stompboxPhaser",
-  "pitch delay": "stompboxPitchDelay",
-  reverb: "stompboxReverb",
-  slope: "stompboxSlope",
-  detune: "stompboxStereoDetune",
-  tube: "stompboxTube",
-  sampler: "space",
-  modular: "pulverisateur",
-  "fm synth": "pulsar"
-};
-
-/** Instruments that can play note tracks (NoteTrackPlayer). Used for add-abc-track. */
-const NOTE_TRACK_INSTRUMENTS = [
-  "heisenberg", "bassline", "space", "gakki", "pulverisateur",
-  "tonematrix", "machiniste", "matrixArpeggiator", "pulsar",
-  "kobolt", "beatbox8", "beatbox9", "centroid", "rasselbock"
-] as const;
-
-const INSTRUMENT_ALIASES: Record<string, string> = {
-  synth: "heisenberg",
-  "poly synth": "heisenberg",
-  pad: "heisenberg",
-  lead: "heisenberg",
-  bass: "bassline",
-  "bass synth": "bassline",
-  acid: "bassline",
-  sampler: "space",
-  rompler: "space",
-  strings: "gakki",
-  "string synth": "gakki",
-  drums: "machiniste",
-  "drum machine": "machiniste",
-  sequencer: "tonematrix",
-  "step sequencer": "tonematrix",
-  arpeggiator: "matrixArpeggiator",
-  matrix: "matrixArpeggiator",
-  // Gakki has French horn and other orchestral sounds
-  "french horn": "gakki",
-  horn: "gakki",
-  trumpet: "gakki",
-  trombone: "gakki",
-  brass: "gakki",
-  woodwind: "heisenberg",
-  flute: "heisenberg",
-  oboe: "heisenberg",
-  "808": "beatbox8",
-  "909": "beatbox9",
-  modular: "pulverisateur",
-  fm: "pulsar",
-  piano: "gakki",
-  pianoforte: "gakki",
-  "acoustic piano": "gakki",
-};
-
-/** Audiotool ticks: 1 whole note = 15360, 1 quarter = 3840 */
-const TICKS_WHOLE = 15360;
-const TICKS_QUARTER = 3840;
-
-/**
- * Parse ABC notation and extract notes using abcjs.
- * Returns { pitch, positionTicks, durationTicks, velocity }.
- * Uses tune.setUpAudio() which returns tracks with events (start/duration in whole-note units).
- */
-function parseAbcToNotes(abcString: string): Array<{ pitch: number; positionTicks: number; durationTicks: number; velocity: number }> {
-  const notes: Array<{ pitch: number; positionTicks: number; durationTicks: number; velocity: number }> = [];
-  try {
-    const tuneObjs = abcjs.parseOnly(abcString.trim());
-    if (!tuneObjs || tuneObjs.length < 1) {
-      throw new Error("No tune found in ABC notation");
-    }
-    const tuneObj = tuneObjs[0] as { setUpAudio?: (opts?: object) => { tracks?: Array<Array<{ cmd?: string; pitch?: number; start?: number; duration?: number; volume?: number }>> } };
-    const audio = tuneObj?.setUpAudio?.({});
-    if (!audio?.tracks) {
-      throw new Error("Could not extract sequence from ABC");
-    }
-    for (const track of audio.tracks) {
-      if (!Array.isArray(track)) continue;
-      for (const ev of track) {
-        if (ev.cmd === "note" && ev.pitch != null) {
-          const start = ev.start ?? 0;
-          const duration = ev.duration ?? 0.25;
-          const positionTicks = Math.round(start * TICKS_WHOLE);
-          const durationTicks = Math.max(TICKS_QUARTER / 4, Math.round(duration * TICKS_WHOLE));
-          const velocity = ev.volume != null ? Math.min(1, Math.max(0, ev.volume / 127)) : 0.7;
-          notes.push({
-            pitch: Math.max(0, Math.min(127, ev.pitch)),
-            positionTicks,
-            durationTicks,
-            velocity,
-          });
-        }
-      }
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`Failed to parse ABC notation: ${msg}`);
-  }
-  return notes.sort((a, b) => a.positionTicks - b.positionTicks);
-}
-
-function levenshtein(a: string, b: string): number {
-  const m = a.length,
-    n = b.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, () =>
-    Array(n + 1).fill(0),
-  );
-  for (let i = 0; i <= m; i++) dp[i][0] = i;
-  for (let j = 0; j <= n; j++) dp[0][j] = j;
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      dp[i][j] =
-        a[i - 1] === b[j - 1]
-          ? dp[i - 1][j - 1]
-          : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
-    }
-  }
-  return dp[m][n];
-}
-
-/**
- * Resolve a user-supplied entity type to a valid one via:
- * 1. exact match, 2. case-insensitive match, 3. Levenshtein fuzzy match (max distance 3).
- * Returns the resolved type or null if nothing is close enough.
- */
-function resolveEntityType(input: string): string | null {
-  const trimmed = input.trim();
-  if (VALID_ENTITY_TYPES.includes(trimmed as any)) return trimmed;
-
-  const lower = trimmed.toLowerCase();
-
-  if (ENTITY_TYPE_ALIASES[lower]) return ENTITY_TYPE_ALIASES[lower];
-
-  const ciMatch = VALID_ENTITY_TYPES.find((t) => t.toLowerCase() === lower);
-  if (ciMatch) return ciMatch;
-
-  let best: string | null = null;
-  let bestDist = Infinity;
-  for (const t of VALID_ENTITY_TYPES) {
-    const d = levenshtein(lower, t.toLowerCase());
-    if (d < bestDist) {
-      bestDist = d;
-      best = t;
-    }
-  }
-  return bestDist <= 3 ? best : null;
-}
-
-/**
- * Resolve user-supplied instrument name to a valid NoteTrackPlayer type.
- * Uses aliases and fuzzy matching.
- */
-function resolveInstrumentType(input: string): string | null {
-  const trimmed = input.trim().toLowerCase();
-  if (NOTE_TRACK_INSTRUMENTS.includes(trimmed as any)) return trimmed;
-  if (INSTRUMENT_ALIASES[trimmed]) return INSTRUMENT_ALIASES[trimmed];
-  const ciMatch = NOTE_TRACK_INSTRUMENTS.find((t) => t.toLowerCase() === trimmed);
-  if (ciMatch) return ciMatch;
-  let best: string | null = null;
-  let bestDist = Infinity;
-  for (const t of NOTE_TRACK_INSTRUMENTS) {
-    const d = levenshtein(trimmed, t.toLowerCase());
-    if (d < bestDist) {
-      bestDist = d;
-      best = t;
-    }
-  }
-  return bestDist <= 3 ? best : null;
-}
-
-/** Short names / LLM outputs → keys in gakki-instruments.json by_gm_name */
-const GAKKI_NAME_SYNONYMS: Record<string, string> = {
-  horn: "french_horn",
-  brass: "brass_section",
-  strings: "string_ensemble_1",
-  string: "string_ensemble_1",
-  orchestral: "string_ensemble_1",
-  symphonic: "string_ensemble_1",
-  piano: "acoustic_grand_piano",
-  pianoforte: "acoustic_grand_piano",
-};
-
-/**
- * Resolve an instrument name (e.g. "french horn", "trumpet") to a Gakki preset UUID.
- * Uses gakki-instruments.json by_gm_name. Returns undefined if not found.
- */
-function resolveGakkiPresetUuid(instrumentName: string): string | undefined {
-  const key = instrumentName
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "_")
-    .replace(/[()]/g, "");
-  const direct = gakkiByGmName[key];
-  if (direct) return direct;
-  const syn = GAKKI_NAME_SYNONYMS[key];
-  return syn ? gakkiByGmName[syn] : undefined;
-}
-
-/** Match user/ABC text to GM keys (order: multi-word phrases before single words like "horn"). */
-const GAKKI_TEXT_PATTERNS: ReadonlyArray<{ pattern: RegExp; gmKey: string }> = [
-  { pattern: /\bfrench\s+horn\b/i, gmKey: "french_horn" },
-  { pattern: /\benglish\s+horn\b/i, gmKey: "english_horn" },
-  { pattern: /\bmuted\s+trumpet\b/i, gmKey: "muted_trumpet" },
-  { pattern: /\bbrass\s+section\b/i, gmKey: "brass_section" },
-  { pattern: /\bstring\s+ensemble\s*2\b/i, gmKey: "string_ensemble_2" },
-  { pattern: /\bstring\s+ensemble\s*1\b/i, gmKey: "string_ensemble_1" },
-  { pattern: /\btrumpet\b/i, gmKey: "trumpet" },
-  { pattern: /\btrombone\b/i, gmKey: "trombone" },
-  { pattern: /\btuba\b/i, gmKey: "tuba" },
-  { pattern: /\bviolin\b/i, gmKey: "violin" },
-  { pattern: /\bviola\b/i, gmKey: "viola" },
-  { pattern: /\bcello\b/i, gmKey: "cello" },
-  { pattern: /\bcontrabass\b/i, gmKey: "contrabass" },
-  { pattern: /\bflute\b/i, gmKey: "flute" },
-  { pattern: /\bpiccolo\b/i, gmKey: "piccolo" },
-  { pattern: /\boboe\b/i, gmKey: "oboe" },
-  { pattern: /\bclarinet\b/i, gmKey: "clarinet" },
-  { pattern: /\bbassoon\b/i, gmKey: "bassoon" },
-  { pattern: /\bhorn\b/i, gmKey: "french_horn" },
-  { pattern: /\bbrass\b/i, gmKey: "brass_section" },
-  { pattern: /\bstrings\b/i, gmKey: "string_ensemble_1" },
-  { pattern: /\bacoustic\s+grand\s+piano\b/i, gmKey: "acoustic_grand_piano" },
-  { pattern: /\bpiano\b/i, gmKey: "acoustic_grand_piano" },
-];
-
-function resolveGakkiPresetUuidFromHints(args: {
-  instrument?: string;
-  orchestralVoice?: string;
-  abcNotation: string;
-}): string | undefined {
-  for (const s of [args.orchestralVoice, args.instrument]) {
-    if (!s?.trim()) continue;
-    const u = resolveGakkiPresetUuid(s);
-    if (u) return u;
-  }
-  const haystack = [
-    args.abcNotation,
-    args.orchestralVoice ?? "",
-    args.instrument ?? "",
-  ].join("\n");
-  for (const { pattern, gmKey } of GAKKI_TEXT_PATTERNS) {
-    if (pattern.test(haystack) && gakkiByGmName[gmKey]) {
-      return gakkiByGmName[gmKey];
-    }
-  }
-  return undefined;
-}
-
-/** Entity types that produce audio and their output field name (for DesktopAudioCable fromSocket). */
-const AUDIO_OUTPUT_FIELD: Record<string, string> = {
-  heisenberg: "audioOutput",
-  bassline: "audioOutput",
-  machiniste: "mainOutput",
-  tonematrix: "audioOutput",
-  stompboxDelay: "audioOutput",
-  space: "audioOutput",
-  gakki: "audioOutput",
-  pulverisateur: "audioOutput",
-  matrixArpeggiator: "audioOutput",
-  audioMerger: "audioOutput",
-  audioSplitter: "audioOutput1",
-  autoFilter: "audioOutput",
-  bandSplitter: "highOutput",
-  beatbox8: "mainOutput",
-  beatbox9: "mainOutput",
-  centroid: "audioOutput",
-  crossfader: "audioOutput",
-  curve: "audioOutput",
-  exciter: "audioOutput",
-  graphicalEQ: "audioOutput",
-  gravity: "audioOutput",
-  helmholtz: "audioOutput",
-  kobolt: "audioOutput",
-  minimixer: "mainOutput",
-  panorama: "audioOutput",
-  pulsar: "audioOutput",
-  quantum: "audioOutput",
-  quasar: "audioOutput",
-  rasselbock: "audioOutput",
-  ringModulator: "audioOutput",
-  stereoEnhancer: "audioOutput",
-  stompboxChorus: "audioOutput",
-  stompboxCompressor: "audioOutput",
-  stompboxCrusher: "audioOutput",
-  stompboxFlanger: "audioOutput",
-  stompboxGate: "audioOutput",
-  stompboxParametricEqualizer: "audioOutput",
-  stompboxPhaser: "audioOutput",
-  stompboxPitchDelay: "audioOutput",
-  stompboxReverb: "audioOutput",
-  stompboxSlope: "audioOutput",
-  stompboxStereoDetune: "audioOutput",
-  stompboxTube: "audioOutput",
-  tinyGain: "audioOutput",
-  waveshaper: "audioOutput"
-};
-
-/**
- * Connect an audio device to the stagebox (mixer) by creating a DesktopAudioCable
- * from the device's output to a new MixerChannel's input.
- * Always creates a new MixerChannel so each device gets its own channel (a channel
- * input can only accept one cable).
- * Uses unique orderAmongStrips and displayName to avoid "multiple pointers" validation errors.
- */
-function connectDeviceToStagebox(t: any, device: any, entityType: string): void {
-  const outputFieldName = AUDIO_OUTPUT_FIELD[entityType];
-  if (!outputFieldName) return;
-
-  const outputField = (device.fields as any)[outputFieldName];
-  if (!outputField?.location) return;
-
-  // orderAmongStrips must be globally unique across all mixer strips
-  const stripTypes = ["mixerChannel", "mixerGroup", "mixerAux", "mixerReverbAux", "mixerDelayAux"];
-  const existingStrips = stripTypes.flatMap((type) =>
-    t.entities.ofTypes(type as any).get()
-  );
-  const maxOrder = existingStrips.reduce((max: number, s: any) => {
-    const dp = (s.fields as any).displayParameters;
-    const order = dp?.fields?.orderAmongStrips?.value ?? 0;
-    return Math.max(max, order);
-  }, -1);
-  const nextOrder = maxOrder + 1;
-
-  const deviceDisplayName = (device.fields as any).displayName?.value ?? "";
-  const channelLabel = deviceDisplayName || `${entityType} ${nextOrder}`;
-
-  const mixerChannel = t.create("mixerChannel" as any, {});
-  if (!mixerChannel) return;
-
-  const displayParams = (mixerChannel.fields as any).displayParameters;
-  if (displayParams?.fields) {
-    t.update(displayParams.fields.orderAmongStrips, nextOrder);
-    t.update(displayParams.fields.displayName, channelLabel);
-  }
-
-  const inputLocation = (mixerChannel.fields as any).audioInput?.location;
-  if (!inputLocation) return;
-
-  t.create("desktopAudioCable" as any, {
-    fromSocket: outputField.location,
-    toSocket: inputLocation,
-  });
-}
-
-// helper function to set the gain of Heisenberg's Operator A
-// operatorA is a NexusObject; its nested fields (e.g. gain) are at operatorA.fields
-function setHeisenbergOperatorAGain(t: any, heisenberg: any, gain: number): void {
-  const operatorA = (heisenberg.fields as any).operatorA;
-  const gainField = operatorA?.fields?.gain;
-  if (gainField) {
-    t.update(gainField, gain);
-  }
-}
 
 // helper for authenticated client
 async function getClient() {
@@ -771,11 +395,23 @@ server.registerTool(
         `[add-entity] Successfully added ${resolvedType} with ID: ${entity?.id}`,
       );
 
+      const exportedFields: Record<string, any> = {};
+      if (entity && entity.fields) {
+        const fields = entity.fields as Record<string, any>;
+        for (const [key, field] of Object.entries(fields)) {
+          if (field && typeof field === 'object' && 'value' in field) {
+            exportedFields[key] = field.value;
+          } else if (field && typeof field === 'object' && 'location' in field) {
+            exportedFields[key] = `[Socket/Port: ${field.location}]`;
+          }
+        }
+      }
+
       return {
         content: [
           {
             type: "text",
-            text: `Added ${resolvedType} at position (${posX}, ${posY}). Entity ID: ${entity?.id}`,
+            text: `Added ${resolvedType} at position (${posX}, ${posY}). Entity ID: ${entity?.id}\nAvailable Fields & Ports:\n${JSON.stringify(exportedFields, null, 2)}`,
           },
         ],
       };
@@ -799,6 +435,114 @@ server.registerTool(
   },
 );
 
+// batch-add-entities tool
+server.registerTool(
+  "batch-add-entities",
+  {
+    description: "Add multiple entities to the Audiotool project at once to save time.",
+    inputSchema: z.object({
+      entities: z.array(z.object({
+        entityType: z.string().describe("Type of entity to add"),
+        properties: z.record(z.string(), z.any()).optional().describe("Properties"),
+        x: z.number().optional().describe("X position (optional)"),
+        y: z.number().optional().describe("Y position (optional)"),
+        autoConnectToMixer: z.boolean().optional().default(true).describe("Whether to automatically connect to mixer")
+      })).describe("Array of entities to create")
+    })
+  },
+  async (args: {
+    entities: Array<{
+      entityType: string;
+      properties?: Record<string, any>;
+      x?: number;
+      y?: number;
+      autoConnectToMixer?: boolean;
+    }>
+  }) => {
+    try {
+      const doc = await getDocument();
+      
+      const modifyResult = await doc.modify((t) => {
+        try {
+          const entityResults: Array<{
+            type: string;
+            id: string;
+            posX: number;
+            posY: number;
+            fields: Record<string, any>;
+          }> = [];
+
+          for (const ent of args.entities) {
+            const { properties } = ent;
+            const resolvedType = resolveEntityType(ent.entityType);
+            if (!resolvedType) return { error: `Unknown entity type: '${ent.entityType}'` };
+            
+            const posX = ent.x ?? autoLayoutOffset * 120;
+            const posY = ent.y ?? 0;
+            autoLayoutOffset++;
+            
+            const entityProperties = {
+              ...(properties || {}),
+              positionX: posX,
+              positionY: posY,
+              gain: 0.5,
+              displayName: (properties?.displayName as string) ?? `${resolvedType} ${autoLayoutOffset}`,
+            };
+            
+            const newEntity = t.create(resolvedType as any, entityProperties);
+            if (!newEntity) return { error: `Failed to create entity: t.create returned undefined` };
+            
+            if (ent.autoConnectToMixer !== false) {
+              connectDeviceToStagebox(t, newEntity, resolvedType);
+            }
+            if (resolvedType === "heisenberg") {
+              setHeisenbergOperatorAGain(t, newEntity, 0.5);
+            }
+
+            const exportedFields: Record<string, any> = {};
+            if (newEntity.fields) {
+              const fields = newEntity.fields as Record<string, any>;
+              for (const [key, field] of Object.entries(fields)) {
+                if (field && typeof field === 'object' && 'value' in field) {
+                  exportedFields[key] = field.value;
+                } else if (field && typeof field === 'object' && 'location' in field) {
+                  exportedFields[key] = `[Socket/Port: ${field.location}]`;
+                }
+              }
+            }
+
+            entityResults.push({
+              type: resolvedType,
+              id: (newEntity as any).id,
+              posX,
+              posY,
+              fields: exportedFields,
+            });
+          }
+          return { ok: true, entities: entityResults };
+        } catch (innerError) {
+          return { error: innerError instanceof Error ? innerError.message : String(innerError) };
+        }
+      });
+      
+      if ("error" in modifyResult) {
+        throw new Error(modifyResult.error as string);
+      }
+      
+      const entities = (modifyResult as { ok: true; entities: Array<{ type: string; id: string; posX: number; posY: number; fields: Record<string, any> }> }).entities;
+      let finalString = "Successfully added entities:\n";
+      for (const res of entities) {
+        finalString += `- ${res.type} at (${res.posX}, ${res.posY}). Entity ID: ${res.id}\n  Available Fields & Ports: ${JSON.stringify(res.fields)}\n`;
+      }
+      return { content: [{ type: "text", text: finalString }] };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[batch-add-entities] ERROR:`, errorMsg);
+      return { content: [{ type: "text", text: `Failed to add entities: ${errorMsg}` }], isError: true };
+    }
+  }
+);
+
 // add-abc-track tool
 server.registerTool(
   "add-abc-track",
@@ -808,7 +552,7 @@ server.registerTool(
       "Parses the ABC string, creates an instrument (or uses an existing note-playing device),",
       "creates a NoteTrack, NoteCollection, NoteRegion, and adds all notes. Call this when the user",
       "provides music in ABC notation (e.g. X:1, K:C, L:1/4, CDEF GABc|).",
-      "When instrument is omitted, acoustic grand piano (Gakki) is used. Orchestral: use instrument=french horn (etc.) or orchestralVoice.",
+      "Orchestral: use instrument=french horn (etc.) or orchestralVoice; do not use instrument=gakki alone (defaults to piano).",
       "Other instruments: heisenberg, bassline, pulsar, kobolt, space, gakki, ",
       "pulverisateur, tonematrix, machiniste, beatbox8, beatbox9, matrixArpeggiator, etc.",
     ].join(" "),
@@ -820,7 +564,7 @@ server.registerTool(
         .string()
         .optional()
         .describe(
-          "Sound/device for the note player. Prefer the user's exact instrument (e.g. french horn, trumpet, violin). Aliases: heisenberg, bassline, space, gakki, pulverisateur, tonematrix, machiniste, matrixArpeggiator, synth, bass, strings, drums, brass, horn, piano, etc. Default: acoustic grand piano (Gakki).",
+          "Sound/device for the note player. Prefer the user's exact instrument (e.g. french horn, trumpet, violin)—not the word gakki alone, which defaults to piano. Aliases: heisenberg, bassline, space, gakki, pulverisateur, tonematrix, machiniste, matrixArpeggiator, synth, bass, strings, drums, brass, horn, etc. Default: heisenberg.",
         ),
       orchestralVoice: z
         .string()
@@ -836,6 +580,13 @@ server.registerTool(
         ),
       x: z.number().optional().describe("X position for new instrument (if created)"),
       y: z.number().optional().describe("Y position for new instrument (if created)"),
+      autoConnectToMixer: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe(
+          "Whether to automatically connect this instrument's output to a new mixer channel. Set to false if you plan to manually route it through a mastering chain."
+        ),
     }),
   },
   async (args: {
@@ -845,6 +596,7 @@ server.registerTool(
     playerEntityId?: string;
     x?: number;
     y?: number;
+    autoConnectToMixer?: boolean;
   }) => {
     try {
       const notes = parseAbcToNotes(args.abcNotation);
@@ -854,23 +606,17 @@ server.registerTool(
 
       const doc = await getDocument();
 
-      const DEFAULT_ABC_INSTRUMENT = "gakki";
       const instrumentType =
-        resolveInstrumentType(
-          args.instrument?.trim() ?? DEFAULT_ABC_INSTRUMENT,
-        ) ?? DEFAULT_ABC_INSTRUMENT;
+        resolveInstrumentType(args.instrument ?? "heisenberg") ?? "heisenberg";
 
-      // Gakki: applyPresetTo with preset from hints, else acoustic grand piano.
+      // Gakki: applyPresetTo with preset from API; bare "gakki" has no UUID → default piano without hints.
       let gakkiPreset: unknown | undefined = undefined;
       if (!args.playerEntityId && instrumentType === "gakki") {
-        let presetUuid = resolveGakkiPresetUuidFromHints({
+        const presetUuid = resolveGakkiPresetUuidFromHints({
           instrument: args.instrument,
           orchestralVoice: args.orchestralVoice,
           abcNotation: args.abcNotation,
         });
-        if (!presetUuid) {
-          presetUuid = gakkiByGmName.acoustic_grand_piano;
-        }
         if (presetUuid) {
           const client = await getClient();
           gakkiPreset = await client.api.presets.get(
@@ -878,7 +624,7 @@ server.registerTool(
           );
         } else {
           console.error(
-            "[add-abc-track] Gakki device but no preset UUID (gakki map empty? instrument=%s orchestralVoice=%s).",
+            "[add-abc-track] Gakki device but no preset UUID (instrument=%s orchestralVoice=%s). Default patch may be piano.",
             args.instrument ?? "",
             args.orchestralVoice ?? "",
           );
@@ -888,12 +634,14 @@ server.registerTool(
       const result = await doc.modify((t) => {
         try {
           let playerLocation: { location: { id: string } };
+          let resolvedPlayerEntityId: string;
           if (args.playerEntityId) {
             const playerEntity = t.entities.getEntity(args.playerEntityId);
             if (!playerEntity) {
               return { error: `Player entity ${args.playerEntityId} not found` };
             }
             playerLocation = playerEntity as any;
+            resolvedPlayerEntityId = args.playerEntityId;
           } else {
             const posX = args.x ?? autoLayoutOffset * 120;
             const posY = args.y ?? 0;
@@ -912,11 +660,14 @@ server.registerTool(
             if (instrumentType === "gakki" && gakkiPreset !== undefined) {
               (t as any).applyPresetTo(player, gakkiPreset);
             }
-            connectDeviceToStagebox(t, player, instrumentType);
+            if (args.autoConnectToMixer !== false) {
+              connectDeviceToStagebox(t, player, instrumentType);
+            }
             if (instrumentType === "heisenberg") {
               setHeisenbergOperatorAGain(t, player, 0.5);
             }
             playerLocation = player as any;
+            resolvedPlayerEntityId = (player as any).id;
           }
 
           const existingTracks = t.entities
@@ -973,6 +724,7 @@ server.registerTool(
           return {
             noteTrackId: (noteTrack as any).id,
             noteCount: notes.length,
+            playerEntityId: resolvedPlayerEntityId,
           };
         } catch (innerError) {
           const msg =
@@ -987,19 +739,20 @@ server.registerTool(
         throw new Error(result.error as string);
       }
 
-      const { noteTrackId, noteCount } = result as {
+      const { noteTrackId, noteCount, playerEntityId } = result as {
         noteTrackId: string;
         noteCount: number;
+        playerEntityId: string;
       };
       console.error(
-        `[add-abc-track] Added track with ${noteCount} notes, track ID: ${noteTrackId}`,
+        `[add-abc-track] Added track with ${noteCount} notes, track ID: ${noteTrackId}, player ID: ${playerEntityId}`,
       );
 
       return {
         content: [
           {
             type: "text",
-            text: `Added ABC track with ${noteCount} notes. NoteTrack ID: ${noteTrackId}`,
+            text: `Added ABC track with ${noteCount} notes. NoteTrack ID: ${noteTrackId}. Player Entity ID: ${playerEntityId}`,
           },
         ],
       };
@@ -1170,6 +923,87 @@ server.registerTool(
     }
   },
 );
+// update entity values (batch) tool
+server.registerTool(
+  "update-entity-values",
+  {
+    description: [
+      "Update multiple parameters/fields on an entity at once. Use ONLY valid field names for the entity type:",
+      "  heisenberg: gain [0-1], glideMs [0-5000], tuneSemitones [-12,12], playModeIndex [1-3], unisonoCount [1-4], unisonoDetuneSemitones [0-1], unisonoStereoSpreadFactor [-1,1], velocityFactor [0-1], operatorDetuneModeIndex [1-2], isActive (bool)",
+      "  bassline: cutoffFrequencyHz [220-12000], filterDecay [0-1], filterEnvelopeModulationDepth [0-1], filterResonance [0-1], accent [0-1], gain [0-1], tuneSemitones [-12,12], waveformIndex [1-2], patternIndex [0-27], isActive (bool)",
+      "  machiniste: globalModulationDepth [-1,1], mainOutputGain [0-1], patternIndex [0-31], isActive (bool)",
+      "  tonematrix: patternIndex [0-7], isActive (bool)",
+      "  stompboxDelay: feedbackFactor [0-1], mix [0-1], stepCount [1-7], stepLengthIndex [1-3], isActive (bool)",
+      "For other entities, use the 'inspect-entity' tool (or check the output of add-entity) to discover the exact names of available fields and their types.",
+    ].join("\n"),
+    inputSchema: z.object({
+      entityID: z.string().describe("ID of the entity to update"),
+      updates: z.record(z.string(), z.union([z.number(), z.boolean()])).describe("Map of field names to new values. e.g. {'gain': 0.5, 'mix': 0.8, 'isActive': false}"),
+    }),
+  },
+  async (args: {
+    entityID: string;
+    updates: Record<string, number | boolean>;
+  }) => {
+    try {
+      const { entityID, updates } = args;
+      const doc = await getDocument();
+
+      const modifyResult = await doc.modify((t) => {
+        try {
+          const entity = t.entities.getEntity(entityID);
+          if (!entity) {
+            return { error: `Entity with ID ${entityID} not found` };
+          }
+
+          const entityFields = entity.fields as Record<string, any>;
+          for (const [fieldName, value] of Object.entries(updates)) {
+            const field = entityFields[fieldName];
+            if (!field) {
+              return {
+                error: `Field '${fieldName}' not found on entity ${entityID}`,
+              };
+            }
+            t.update(field, value);
+          }
+          return { ok: true };
+        } catch (innerError) {
+          const msg =
+            innerError instanceof Error
+              ? innerError.message
+              : String(innerError);
+          return { error: msg };
+        }
+      });
+
+      if ("error" in modifyResult) {
+        throw new Error(modifyResult.error as string);
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Updated ${Object.keys(updates).length} fields on entity ${entityID} to new values: ${JSON.stringify(updates)}`,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[update-entity-values] ERROR:`, errorMsg);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Failed to update entity values: ${errorMsg}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
 // update entity position tool
 server.registerTool(
   "update-entity-position",
@@ -1239,6 +1073,82 @@ server.registerTool(
           {
             type: "text",
             text: `Failed to move entity: ${errorMsg}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+// update entity positions (batch) tool
+server.registerTool(
+  "update-entity-positions",
+  {
+    description: "Update the position of multiple entities on the desktop at once. Use this to organize layouts efficiently.",
+    inputSchema: z.object({
+      updates: z.array(z.object({
+        entityID: z.string().describe("ID of the entity to move"),
+        x: z.number().describe("New X position"),
+        y: z.number().describe("New Y position"),
+      })).describe("List of position updates"),
+    }),
+  },
+  async (args: { updates: Array<{ entityID: string; x: number; y: number }> }) => {
+    try {
+      const { updates } = args;
+      console.error(`[update-entity-positions] Moving ${updates.length} entities...`);
+      const doc = await getDocument();
+
+      const modifyResult = await doc.modify((t) => {
+        try {
+          for (const update of updates) {
+            const entity = t.entities.getEntity(update.entityID);
+            if (!entity) {
+              return { error: `Entity with ID ${update.entityID} not found` };
+            }
+
+            const fields = entity.fields as any;
+            if (!fields.positionX || !fields.positionY) {
+              return {
+                error: `Entity ${update.entityID} does not have positionX/positionY fields`,
+              };
+            }
+
+            t.update(fields.positionX, update.x);
+            t.update(fields.positionY, update.y);
+          }
+          return { ok: true };
+        } catch (innerError) {
+          const msg =
+            innerError instanceof Error
+              ? innerError.message
+              : String(innerError);
+          return { error: msg };
+        }
+      });
+
+      if ("error" in modifyResult) {
+        throw new Error(modifyResult.error as string);
+      }
+
+      console.error(`[update-entity-positions] Successfully moved ${updates.length} entities`);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Moved ${updates.length} entities successfully.`,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[update-entity-positions] ERROR:`, errorMsg);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Failed to move entities: ${errorMsg}`,
           },
         ],
         isError: true,
@@ -1336,6 +1246,17 @@ server.registerTool(
             return { error: `Field '${targetField}' missing or not a socket on entity ${targetEntityId}` };
           }
           
+          // Auto-disconnect existing cables targeting this input socket to prevent multiple-pointer validation errors
+          const existingCables = t.entities.ofTypes("desktopAudioCable" as any, "desktopNoteCable" as any).get();
+          for (const cable of existingCables) {
+            const toSock = (cable.fields as any).toSocket;
+            if (toSock && toSock.location && targetSocket.location) {
+              if (toSock.location.id === targetSocket.location.id || toSock.location === targetSocket.location) {
+                t.remove(cable.id);
+              }
+            }
+          }
+
           const newCable = t.create(cableType as any, {
             fromSocket: sourceSocket.location,
             toSocket: targetSocket.location
@@ -1359,6 +1280,92 @@ server.registerTool(
     } catch (err) {
       return {
         content: [{ type: "text", text: `Failed to connect entities: ${err instanceof Error ? err.message : String(err)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// batch connect entities tool
+server.registerTool(
+  "batch-connect-entities",
+  {
+    description: "Connect multiple entity audio/note ports in a single batch operation. Extremely useful for wiring up mastering chains or complex synth pipelines quickly.",
+    inputSchema: z.object({
+      connections: z.array(z.object({
+        sourceEntityId: z.string().describe("ID of the source entity (e.g. the synthesizer or effect outputting signal)"),
+        sourceField: z.string().describe("Name of the source field (e.g. 'audioOutput' or 'mainOutput')"),
+        targetEntityId: z.string().describe("ID of the target entity (e.g. an effect or mixerChannel receiving signal)"),
+        targetField: z.string().describe("Name of the target field (e.g. 'audioInput' or 'audioInput1')"),
+        cableType: z.string().optional().default("desktopAudioCable").describe("Type of cable to create. Default is 'desktopAudioCable'. For notes, use 'desktopNoteCable'."),
+      })).describe("Array of connections to create"),
+    }),
+  },
+  async (args) => {
+    try {
+      const { connections } = args;
+      const doc = await getDocument();
+      
+      const modifyResult = await doc.modify((t) => {
+        try {
+          const createdCableIds: string[] = [];
+          const socketsWiredInThisBatch = new Set<string>();
+          for (const conn of connections) {
+            const { sourceEntityId, sourceField, targetEntityId, targetField, cableType } = conn;
+            const sourceEntity = t.entities.getEntity(sourceEntityId);
+            if (!sourceEntity) return { error: `Source entity ${sourceEntityId} not found` };
+            
+            const targetEntity = t.entities.getEntity(targetEntityId);
+            if (!targetEntity) return { error: `Target entity ${targetEntityId} not found` };
+            
+            const sourceSocket = (sourceEntity.fields as any)[sourceField];
+            if (!sourceSocket || !sourceSocket.location) {
+              return { error: `Field '${sourceField}' missing or not a socket on entity ${sourceEntityId}` };
+            }
+            
+            const targetSocket = (targetEntity.fields as any)[targetField];
+            if (!targetSocket || !targetSocket.location) {
+              return { error: `Field '${targetField}' missing or not a socket on entity ${targetEntityId}` };
+            }
+            
+            // Auto-disconnect existing cables targeting this input socket, BUT ONLY if we haven't wired to it in this batch.
+            if (!socketsWiredInThisBatch.has(targetSocket.location.id)) {
+              const existingCables = t.entities.ofTypes("desktopAudioCable" as any, "desktopNoteCable" as any).get();
+              for (const cable of existingCables) {
+                const toSock = (cable.fields as any).toSocket;
+                if (toSock && toSock.location && targetSocket.location) {
+                  if (toSock.location.id === targetSocket.location.id || toSock.location === targetSocket.location) {
+                    t.remove(cable.id);
+                  }
+                }
+              }
+              socketsWiredInThisBatch.add(targetSocket.location.id);
+            }
+
+            const newCable = t.create((cableType || "desktopAudioCable") as any, {
+              fromSocket: sourceSocket.location,
+              toSocket: targetSocket.location
+            });
+            if (!newCable) return { error: `Failed to create cable for ${sourceEntityId} -> ${targetEntityId}` };
+            
+            createdCableIds.push((newCable as any).id);
+          }
+          return { ok: true, cableIds: createdCableIds };
+        } catch (innerError) {
+          return { error: innerError instanceof Error ? innerError.message : String(innerError) };
+        }
+      });
+      
+      if ("error" in modifyResult) {
+        throw new Error(modifyResult.error as string);
+      }
+      
+      return {
+        content: [{ type: "text", text: `Successfully wired ${connections.length} connections. Cable IDs: ${(modifyResult as any).cableIds.join(", ")}` }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: "text", text: `Failed to batch connect entities: ${err instanceof Error ? err.message : String(err)}` }],
         isError: true,
       };
     }
@@ -1473,119 +1480,6 @@ server.registerTool(
 );
 
 // recommend-entity-for-style tool
-const STYLE_MAP: Record<string, { entityType: string; reason: string }> = {
-  // genre / artist keywords → best entity
-  bass: {
-    entityType: "bassline",
-    reason: "Bass-heavy sound is best served by the bassline monophonic synth.",
-  },
-  acid: {
-    entityType: "bassline",
-    reason: "Acid sounds (303-style) map to the bassline synth.",
-  },
-  sub: {
-    entityType: "bassline",
-    reason: "Sub-bass frequencies are the domain of the bassline synth.",
-  },
-  "daft punk": {
-    entityType: "bassline",
-    reason: "Daft Punk frequently uses monophonic synth bass lines.",
-  },
-  techno: {
-    entityType: "machiniste",
-    reason: "Techno is driven by drum machine patterns.",
-  },
-  drum: {
-    entityType: "machiniste",
-    reason: "Drum / beat requests map to the machiniste drum machine.",
-  },
-  beat: {
-    entityType: "machiniste",
-    reason: "Beat / rhythm requests map to the machiniste drum machine.",
-  },
-  percussion: {
-    entityType: "machiniste",
-    reason: "Percussion requests map to the machiniste drum machine.",
-  },
-  "hip hop": {
-    entityType: "machiniste",
-    reason: "Hip hop relies on drum machine beats.",
-  },
-  trap: {
-    entityType: "machiniste",
-    reason: "Trap is driven by drum machine patterns.",
-  },
-  pad: {
-    entityType: "heisenberg",
-    reason:
-      "Pads and atmospheric textures map to the heisenberg polyphonic synth.",
-  },
-  chord: {
-    entityType: "heisenberg",
-    reason: "Chords need a polyphonic synth like heisenberg.",
-  },
-  ambient: {
-    entityType: "heisenberg",
-    reason: "Ambient / atmospheric sounds map to heisenberg.",
-  },
-  lead: {
-    entityType: "heisenberg",
-    reason: "Lead synth melodies map to heisenberg.",
-  },
-  keys: {
-    entityType: "heisenberg",
-    reason: "Keyboard / keys parts map to heisenberg.",
-  },
-  piano: {
-    entityType: "heisenberg",
-    reason: "Piano-like polyphonic parts map to heisenberg.",
-  },
-  arpeggio: {
-    entityType: "tonematrix",
-    reason: "Arpeggios and sequenced patterns map to the tonematrix.",
-  },
-  loop: {
-    entityType: "tonematrix",
-    reason: "Melodic loops and generative patterns map to the tonematrix.",
-  },
-  sequence: {
-    entityType: "tonematrix",
-    reason: "Step-sequenced patterns map to the tonematrix.",
-  },
-  delay: {
-    entityType: "stompboxDelay",
-    reason: "Delay / echo effects map to the stompboxDelay.",
-  },
-  echo: {
-    entityType: "stompboxDelay",
-    reason: "Echo effects map to the stompboxDelay.",
-  },
-  space: {
-    entityType: "stompboxDelay",
-    reason: "Spacey / spatial effects map to the stompboxDelay.",
-  },
-  reverb: {
-    entityType: "stompboxDelay",
-    reason:
-      "Reverb-like spatial effects can be approximated with stompboxDelay.",
-  },
-};
-
-function recommendEntityForStyle(description: string): {
-  entityType: string;
-  reason: string;
-} {
-  const lower = description.toLowerCase();
-  for (const [keyword, rec] of Object.entries(STYLE_MAP)) {
-    if (lower.includes(keyword)) return rec;
-  }
-  return {
-    entityType: "heisenberg",
-    reason:
-      "Heisenberg is the most versatile synth and a good default for unrecognised styles.",
-  };
-}
-
 server.registerTool(
   "recommend-entity-for-style",
   {

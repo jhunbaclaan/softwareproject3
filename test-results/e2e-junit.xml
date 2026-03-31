@@ -1,0 +1,60 @@
+<testsuites id="" name="" tests="22" failures="0" skipped="0" errors="0" time="3.6821359999999994">
+<testsuite name="agent-interaction.spec.ts" timestamp="2026-03-31T21:39:27.833Z" hostname="chromium" tests="3" failures="0" skipped="0" time="2.792" errors="0">
+<testcase name="Agent Interaction › sends a message and displays the agent response" classname="agent-interaction.spec.ts" time="0.841">
+</testcase>
+<testcase name="Agent Interaction › displays error message when agent call fails" classname="agent-interaction.spec.ts" time="0.889">
+</testcase>
+<testcase name="Agent Interaction › clears chat messages when &quot;Clear chat&quot; is clicked" classname="agent-interaction.spec.ts" time="1.062">
+</testcase>
+</testsuite>
+<testsuite name="app.spec.ts" timestamp="2026-03-31T21:39:27.833Z" hostname="chromium" tests="7" failures="0" skipped="0" time="5.827" errors="0">
+<testcase name="Nexus Agent App › loads the app and displays the console sidebar" classname="app.spec.ts" time="0.775">
+</testcase>
+<testcase name="Nexus Agent App › shows login status as &quot;Logged out&quot; by default" classname="app.spec.ts" time="0.75">
+</testcase>
+<testcase name="Nexus Agent App › displays the chat input with correct placeholder" classname="app.spec.ts" time="0.882">
+</testcase>
+<testcase name="Nexus Agent App › disables the Send button when input is empty" classname="app.spec.ts" time="0.808">
+</testcase>
+<testcase name="Nexus Agent App › enables the Send button when input has text" classname="app.spec.ts" time="0.875">
+</testcase>
+<testcase name="Nexus Agent App › opens settings sidebar when cogwheel is clicked" classname="app.spec.ts" time="0.88">
+</testcase>
+<testcase name="Nexus Agent App › shows the New Project button" classname="app.spec.ts" time="0.857">
+</testcase>
+</testsuite>
+<testsuite name="auth-flow.spec.ts" timestamp="2026-03-31T21:39:27.833Z" hostname="chromium" tests="2" failures="0" skipped="0" time="1.737" errors="0">
+<testcase name="Authentication Flow › shows logged out state by default" classname="auth-flow.spec.ts" time="0.88">
+</testcase>
+<testcase name="Authentication Flow › shows logged in state when tokens are in localStorage" classname="auth-flow.spec.ts" time="0.857">
+</testcase>
+</testsuite>
+<testsuite name="chat.spec.ts" timestamp="2026-03-31T21:39:27.833Z" hostname="chromium" tests="1" failures="0" skipped="0" time="0.799" errors="0">
+<testcase name="Nexus Agent Chat Interface › should allow user to enter an agent prompt" classname="chat.spec.ts" time="0.799">
+</testcase>
+</testsuite>
+<testsuite name="music-generation.spec.ts" timestamp="2026-03-31T21:39:27.833Z" hostname="chromium" tests="3" failures="0" skipped="0" time="2.185" errors="0">
+<testcase name="Music Generation › generates music and shows audio player on success" classname="music-generation.spec.ts" time="0.75">
+</testcase>
+<testcase name="Music Generation › displays error when agent returns an error event" classname="music-generation.spec.ts" time="0.678">
+</testcase>
+<testcase name="Music Generation › audio preview element has controls attribute" classname="music-generation.spec.ts" time="0.757">
+</testcase>
+</testsuite>
+<testsuite name="project-management.spec.ts" timestamp="2026-03-31T21:39:27.833Z" hostname="chromium" tests="3" failures="0" skipped="0" time="2.073" errors="0">
+<testcase name="Project Management › shows &quot;New Project&quot; button that is disabled when not logged in" classname="project-management.spec.ts" time="0.698">
+</testcase>
+<testcase name="Project Management › displays project list heading when projects section is present" classname="project-management.spec.ts" time="0.678">
+</testcase>
+<testcase name="Project Management › shows disconnect button text for connected projects" classname="project-management.spec.ts" time="0.697">
+</testcase>
+</testsuite>
+<testsuite name="settings.spec.ts" timestamp="2026-03-31T21:39:27.833Z" hostname="chromium" tests="3" failures="0" skipped="0" time="3.208" errors="0">
+<testcase name="Settings › dark mode toggle sets data-theme attribute on document" classname="settings.spec.ts" time="1.219">
+</testcase>
+<testcase name="Settings › LLM provider can be changed via dropdown" classname="settings.spec.ts" time="0.775">
+</testcase>
+<testcase name="Settings › settings persist across page reload" classname="settings.spec.ts" time="1.214">
+</testcase>
+</testsuite>
+</testsuites>

@@ -6,7 +6,7 @@ export default defineConfig({
   forbidOnly: false,
   retries: 0,
   workers: undefined,
-  reporter: 'html',
+  reporter: [['html'], ['junit', { outputFile: '../test-results/e2e-junit.xml' }]],
   use: {
     baseURL: 'http://localhost:5173',
     trace: 'on-first-retry',

@@ -37,4 +37,66 @@ describe('Frontend API wrapper tests', () => {
     }));
   });
 
+
+
+  it('runAgent includes auth tokens in payload', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ reply: 'ok' }),
+    } as Response);
+
+    const payload = {
+      prompt: 'test',
+      keywords: [],
+      loop: 1,
+      authTokens: {
+        accessToken: 'tok-123',
+        expiresAt: 9999999999,
+        clientId: 'client-1',
+        redirectUrl: 'http://localhost/',
+        scope: 'project:write',
+      },
+      projectUrl: 'projects/abc',
+    };
+
+    await runAgent(MOCK_BASE_URL, payload);
+
+    const fetchCall = vi.mocked(fetch).mock.calls[0];
+    const body = JSON.parse(fetchCall[1]?.body as string);
+    expect(body.authTokens.accessToken).toBe('tok-123');
+    expect(body.projectUrl).toBe('projects/abc');
+  });
+
+  it('runAgent sends correct LLM provider', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ reply: 'ok' }),
+    } as Response);
+
+    const payload = {
+      prompt: 'test',
+      keywords: [],
+      loop: 1,
+      llmProvider: 'anthropic' as const,
+      llmApiKey: 'sk-ant-123',
+    };
+
+    await runAgent(MOCK_BASE_URL, payload);
+
+    const fetchCall = vi.mocked(fetch).mock.calls[0];
+    const body = JSON.parse(fetchCall[1]?.body as string);
+    expect(body.llmProvider).toBe('anthropic');
+    expect(body.llmApiKey).toBe('sk-ant-123');
+  });
+  it('runAgent throws on non-ok response', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+    } as Response);
+
+    await expect(
+      runAgent(MOCK_BASE_URL, { prompt: 'test', keywords: [], loop: 1 })
+    ).rejects.toThrow('Agent run failed (503)');
+  });
 });
+

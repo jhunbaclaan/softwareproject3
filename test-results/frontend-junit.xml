@@ -1,0 +1,1837 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="46" failures="0" errors="0" time="2.5325736">
+    <testsuite name="src/tests/api.test.ts" timestamp="2026-03-31T21:39:26.240Z" hostname="Josh-Tower" tests="5" failures="0" errors="0" skipped="0" time="0.0052496">
+        <testcase classname="src/tests/api.test.ts" name="Frontend API wrapper tests &gt; healthCheck success" time="0.0019846">
+        </testcase>
+        <testcase classname="src/tests/api.test.ts" name="Frontend API wrapper tests &gt; runAgent success" time="0.0010202">
+        </testcase>
+        <testcase classname="src/tests/api.test.ts" name="Frontend API wrapper tests &gt; runAgent includes auth tokens in payload" time="0.0002655">
+        </testcase>
+        <testcase classname="src/tests/api.test.ts" name="Frontend API wrapper tests &gt; runAgent sends correct LLM provider" time="0.0002086">
+        </testcase>
+        <testcase classname="src/tests/api.test.ts" name="Frontend API wrapper tests &gt; runAgent throws on non-ok response" time="0.0008554">
+        </testcase>
+    </testsuite>
+    <testsuite name="src/tests/App.test.tsx" timestamp="2026-03-31T21:39:26.242Z" hostname="Josh-Tower" tests="34" failures="0" errors="0" skipped="0" time="0.5013952">
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; renders without crashing" time="0.0253649">
+            <system-err>
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Authentication &gt; shows &quot;Logged out&quot; status by default" time="0.0162183">
+            <system-err>
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Authentication &gt; shows Login button when not logged in" time="0.0058696">
+            <system-err>
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Authentication &gt; shows &quot;Logged in&quot; and username after successful login check" time="0.0334869">
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Authentication &gt; shows Logout button once logged in" time="0.0154568">
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Project Management &gt; shows &quot;New Project&quot; button" time="0.0059142">
+            <system-err>
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Project Management &gt; disables &quot;New Project&quot; button when not logged in" time="0.0068399">
+            <system-err>
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Project Management &gt; shows &quot;Project idle&quot; status in the sidebar footer by default" time="0.0058684">
+            <system-err>
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Project Management &gt; shows project connection hint when no project is connected" time="0.0060857">
+            <system-err>
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Project Management &gt; shows project list heading when logged in" time="0.0371325">
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Chat Interface &gt; shows the empty state message initially" time="0.0060007">
+            <system-err>
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Chat Interface &gt; has a chat input with correct placeholder" time="0.0059854">
+            <system-err>
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Chat Interface &gt; disables the Send button when input is empty" time="0.0056547">
+            <system-err>
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Chat Interface &gt; enables the Send button when input has text" time="0.0070435">
+            <system-err>
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Chat Interface &gt; sends a message and displays user + assistant messages" time="0.0381316">
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Chat Interface &gt; clears the input after sending" time="0.0152355">
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Chat Interface &gt; clears all messages when Clear chat is clicked" time="0.0312747">
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Settings &gt; opens settings sidebar when cogwheel is clicked" time="0.01374">
+            <system-err>
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Settings &gt; closes settings sidebar when close button is clicked" time="0.0108768">
+            <system-err>
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Settings &gt; toggles dark mode and updates document attribute" time="0.0215303">
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Settings &gt; persists font size to localStorage when changed" time="0.0150368">
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Settings &gt; toggles show timestamps and persists to localStorage" time="0.0155279">
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Settings &gt; changes LLM provider and persists to localStorage" time="0.01579">
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Settings &gt; changes theme via the select and persists to localStorage" time="0.0148405">
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Tutorial &gt; displays the tutorial overlay on first render" time="0.0042906">
+            <system-err>
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Tutorial &gt; advances to the next tutorial step when Next is clicked" time="0.0100373">
+            <system-err>
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Tutorial &gt; dismisses the tutorial when Skip Tutorial is clicked" time="0.0051076">
+            <system-err>
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Tutorial &gt; shows Finish on the last tutorial step and dismisses on click" time="0.0055779">
+            <system-err>
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+Warning: An update to App inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at App (C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/App.tsx:92:68)
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Error Handling &gt; displays an error message when runAgentStream rejects" time="0.0214921">
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Error Handling &gt; re-enables Send button after an error" time="0.0155086">
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Accessibility Settings &gt; toggles reduce motion attribute on document" time="0.0141688">
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Accessibility Settings &gt; toggles high contrast attribute on document" time="0.0161415">
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Accessibility Settings &gt; toggles auto scroll and persists to localStorage" time="0.0160198">
+        </testcase>
+        <testcase classname="src/tests/App.test.tsx" name="App component &gt; Accessibility Settings &gt; changes message density and persists to localStorage" time="0.0157392">
+        </testcase>
+    </testsuite>
+    <testsuite name="src/tests/audiotool/importGeneratedAudio.test.ts" timestamp="2026-03-31T21:39:26.251Z" hostname="Josh-Tower" tests="7" failures="0" errors="0" skipped="0" time="2.0259288">
+        <testcase classname="src/tests/audiotool/importGeneratedAudio.test.ts" name="importGeneratedAudio tests &gt; uploads blob and mutates document correctly" time="0.0041036">
+            <system-out>
+[createSample] Trying candidate 0 (displayName+description+sampleType+usage+tags)…
+
+[createSample] Success with candidate 0 (displayName+description+sampleType+usage+tags), sample: sample_id_123
+
+            </system-out>
+        </testcase>
+        <testcase classname="src/tests/audiotool/importGeneratedAudio.test.ts" name="importGeneratedAudio tests &gt; throws on empty blob" time="0.0010072">
+        </testcase>
+        <testcase classname="src/tests/audiotool/importGeneratedAudio.test.ts" name="importGeneratedAudio tests &gt; throws on upload PUT failure" time="0.0004115">
+            <system-out>
+[createSample] Trying candidate 0 (displayName+description+sampleType+usage+tags)…
+
+[createSample] Success with candidate 0 (displayName+description+sampleType+usage+tags), sample: sample_id_123
+
+            </system-out>
+        </testcase>
+        <testcase classname="src/tests/audiotool/importGeneratedAudio.test.ts" name="importGeneratedAudio tests &gt; retries createSample with fallback payloads on validation error" time="0.0023761">
+            <system-out>
+[createSample] Trying candidate 0 (displayName+description+sampleType+usage+tags)…
+
+[createSample] Trying candidate 1 (displayName+sampleType+usage)…
+
+[createSample] Success with candidate 1 (displayName+sampleType+usage), sample: sample_from_retry
+
+            </system-out>
+            <system-err>
+[createSample] Candidate 0 (displayName+description+sampleType+usage+tags) failed: {
+  message: &apos;invalid field: tags is not valid&apos;,
+  code: undefined,
+  details: undefined,
+  metadata: undefined,
+  name: &apos;Error&apos;,
+  stack: &apos;Error: invalid field: tags is not valid\n&apos; +
+    &apos;    at C:/Users/aorex/PycharmProjects/softwareproject3/frontend/src/tests/audiotool/importGeneratedAudio.test.ts:129:30\n&apos; +
+    &apos;    at file:///C:/Users/aorex/PycharmProjects/softwareproject3/frontend/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11\n&apos; +
+    &apos;    at file:///C:/Users/aorex/PycharmProjects/softwareproject3/frontend/node_modules/@vitest/runner/dist/chunk-artifact.js:1893:26\n&apos; +
+    &apos;    at file:///C:/Users/aorex/PycharmProjects/softwareproject3/frontend/node_modules/@vitest/runner/dist/chunk-artifact.js:2316:20\n&apos; +
+    &apos;    at new Promise (&lt;anonymous&gt;)\n&apos; +
+    &apos;    at runWithCancel (file:///C:/Users/aorex/PycharmProjects/softwareproject3/frontend/node_modules/@vitest/runner/dist/chunk-artifact.js:2313:10)\n&apos; +
+    &apos;    at file:///C:/Users/aorex/PycharmProjects/softwareproject3/frontend/node_modules/@vitest/runner/dist/chunk-artifact.js:2295:20\n&apos; +
+    &apos;    at new Promise (&lt;anonymous&gt;)\n&apos; +
+    &apos;    at runWithTimeout (file:///C:/Users/aorex/PycharmProjects/softwareproject3/frontend/node_modules/@vitest/runner/dist/chunk-artifact.js:2262:10)\n&apos; +
+    &apos;    at file:///C:/Users/aorex/PycharmProjects/softwareproject3/frontend/node_modules/@vitest/runner/dist/chunk-artifact.js:2945:64&apos;
+}
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/tests/audiotool/importGeneratedAudio.test.ts" name="importGeneratedAudio tests &gt; polls getSample until wavUrl is available" time="2.0145363">
+            <system-out>
+[createSample] Trying candidate 0 (displayName+description+sampleType+usage+tags)…
+
+[createSample] Success with candidate 0 (displayName+description+sampleType+usage+tags), sample: sample_id_123
+
+            </system-out>
+        </testcase>
+        <testcase classname="src/tests/audiotool/importGeneratedAudio.test.ts" name="importGeneratedAudio tests &gt; correctly uses layoutIndex for positioning" time="0.0010965">
+            <system-out>
+[createSample] Trying candidate 0 (displayName+description+sampleType+usage+tags)…
+
+[createSample] Success with candidate 0 (displayName+description+sampleType+usage+tags), sample: sample_id_123
+
+            </system-out>
+        </testcase>
+        <testcase classname="src/tests/audiotool/importGeneratedAudio.test.ts" name="importGeneratedAudio tests &gt; calculates duration ticks based on BPM" time="0.0011226">
+            <system-out>
+[createSample] Trying candidate 0 (displayName+description+sampleType+usage+tags)…
+
+[createSample] Success with candidate 0 (displayName+description+sampleType+usage+tags), sample: sample_id_123
+
+            </system-out>
+        </testcase>
+    </testsuite>
+</testsuites>

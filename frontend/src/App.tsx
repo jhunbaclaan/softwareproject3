@@ -7,7 +7,7 @@ import {
   type SyncedDocument,
 } from '@audiotool/nexus';
 import './App.css';
-import { runAgent, type AuthTokens, type ConversationMessage, type DawContext, type LLMProvider } from './api';
+import { runAgentStream, type AuthTokens, type ConversationMessage, type LLMProvider, type TraceItem, type DawContext } from './api';
 import { importAudioBlobToProject } from './audiotool/importGeneratedAudio';
 
 type Role = 'user' | 'assistant';
@@ -17,6 +17,7 @@ type Message = {
   role: Role;
   content: string;
   timestamp: string;
+  traces?: TraceItem[];
 };
 
 type ProjectItem = {
@@ -219,7 +220,9 @@ export default function App() {
     return 'comfortable';
   });
   const [tutorialStep, setTutorialStep] = useState(() => {
-    // For testing, always show tutorial on load
+    if (typeof window !== 'undefined' && window.localStorage.getItem('tutorialCompleted') === 'true') {
+      return 0;
+    }
     return 1;
   });
   const [cogwheelPos, setCogwheelPos] = useState({ top: '50px', right: '20px' });
@@ -381,10 +384,10 @@ export default function App() {
     return () => window.removeEventListener('resize', updateCogwheelPos);
   }, []);
 
-  const addMessage = (role: Role, content: string) => {
+  const addMessage = (role: Role, content: string, msgId?: string) => {
     setMessages((prev) => [
       ...prev,
-      { id: createId(), role, content, timestamp: nowStamp() },
+      { id: msgId || createId(), role, content, timestamp: nowStamp() },
     ]);
   };
 
@@ -626,7 +629,12 @@ export default function App() {
 
       const dawContext = getDawContext(syncedDocument);
 
-      const response = await runAgent('http://127.0.0.1:8000', {
+      const assistantId = createId();
+      addMessage('assistant', '', assistantId);
+
+      let pendingMusic: { blob: Blob; prompt: string; durationMs: number } | null = null;
+
+      await runAgentStream('http://127.0.0.1:8000', {
         prompt: trimmed,
         keywords: [],
         loop: 1,
@@ -637,25 +645,47 @@ export default function App() {
         llmApiKey: llmApiKey.trim() || undefined,
         elevenlabsApiKey: elevenLabsApiKey.trim() || undefined,
         dawContext,
+      }, async (event) => {
+        if (event.type === 'reply') {
+           setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: event.data.reply } : m));
+
+           const gm = event.data.generated_music;
+           if (gm?.audio_base64) {
+             const blob = new Blob(
+               [Uint8Array.from(atob(gm.audio_base64), (c) => c.charCodeAt(0))],
+               { type: 'audio/mpeg' },
+             );
+             const url = URL.createObjectURL(blob);
+             setPreviewAudioUrl(url);
+             pendingMusic = { blob, prompt: gm.prompt, durationMs: gm.music_length_ms ?? 15000 };
+           }
+        } else if (event.type === 'trace' || event.type === 'trace_update') {
+           setMessages(prev => prev.map(m => {
+             if (m.id === assistantId) {
+                const traces = [...(m.traces || [])];
+                const existing = traces.findIndex(t => t.id === event.data.id);
+                if (existing >= 0) {
+                  traces[existing] = { ...traces[existing], ...event.data };
+                } else {
+                  traces.push(event.data);
+                }
+                return { ...m, traces };
+             }
+             return m;
+           }));
+        } else if (event.type === 'error') {
+           setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: event.data.error } : m));
+        }
       });
-      addMessage('assistant', response.reply);
 
-      const gm = response.generated_music;
-      if (gm?.audio_base64) {
-        const blob = new Blob(
-          [Uint8Array.from(atob(gm.audio_base64), (c) => c.charCodeAt(0))],
-          { type: 'audio/mpeg' },
-        );
-        const url = URL.createObjectURL(blob);
-        setPreviewAudioUrl(url);
-
-        const durationMs = gm.music_length_ms ?? 15000;
+      if (pendingMusic) {
+        const { blob, prompt, durationMs } = pendingMusic;
         if (client && syncedDocument && projectStatus === 'connected') {
           setPreviewDawMessage('Uploading sample and adding to timeline…');
           try {
             const idx = audioImportLayoutRef.current++;
             await importAudioBlobToProject(client, syncedDocument, blob, {
-              displayName: `ElevenLabs: ${gm.prompt.slice(0, 80)}`,
+              displayName: `ElevenLabs: ${prompt.slice(0, 80)}`,
               durationMs,
               layoutIndex: idx,
             });
@@ -675,7 +705,7 @@ export default function App() {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      addMessage('assistant', `Error: ${message}`);
+      setMessages(prev => prev.map(m => m.role === 'assistant' && !m.content ? { ...m, content: `Error: ${message}` } : m));
     } finally {
       setIsRunning(false);
     }
@@ -875,7 +905,7 @@ export default function App() {
                 <div className="empty">
                   <p>
                     Start the conversation by sending a message. You can paste ABC notation, ask the agent to add
-                    instruments, or describe music you want generated (ElevenLabs)—for example: &quot;Generate 15 seconds of
+                    instruments, or describe music you want generated (ElevenLabs)&mdash;for example: &quot;Generate 15 seconds of
                     chill lo-fi beats, instrumental.&quot;
                   </p>
                 </div>
@@ -886,7 +916,20 @@ export default function App() {
                       <span className="role">{message.role}</span>
                       {showTimestamps && <span className="time">{message.timestamp}</span>}
                     </div>
-                    <p>{message.content}</p>
+                    {message.traces && message.traces.length > 0 && (
+                      <div className="message-traces" style={{ fontSize: '0.85em', opacity: 0.8, marginBottom: '8px', padding: '8px', background: 'rgba(0,0,0,0.1)', borderRadius: '4px', borderLeft: '2px solid var(--accent, #666)' }}>
+                        {message.traces.map(t => (
+                          <div key={t.id} style={{ marginBottom: '4px' }}>
+                            <span style={{ fontWeight: 'bold' }}>{t.label}</span>
+                            {t.status === 'running' && <span style={{ marginLeft: 8, fontStyle: 'italic' }}>running...</span>}
+                            {t.status === 'done' && <span style={{ marginLeft: 8, color: '#4caf50' }}>✓ finished</span>}
+                            {t.status === 'error' && <span style={{ marginLeft: 8, color: '#f44336' }}>✗ failed</span>}
+                            <div style={{ fontSize: '0.9em', opacity: 0.7, wordBreak: 'break-all' }}>{t.detail}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <p style={{ whiteSpace: 'pre-wrap' }}>{message.content || (message.role === 'assistant' && !message.traces?.length ? 'Thinking...' : '')}</p>
                   </div>
                 ))
               )}

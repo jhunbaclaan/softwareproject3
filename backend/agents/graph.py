@@ -38,6 +38,7 @@ class AgentState(TypedDict, total=False):
     generated_music: Optional[Dict[str, Any]]
     mcp_client: Any
     daw_context: Optional[Dict[str, Any]]
+    stream_callback: Optional[Any]
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +46,7 @@ class AgentState(TypedDict, total=False):
 # ---------------------------------------------------------------------------
 
 STYLE_PATTERNS = re.compile(
-    r"\b(sound(?:s)? like|style of|genre|vibe|make it|inspired by)\b",
+    r"\b(sound(?:s)?(?:\s+like)?|style of|genre|vibe|make it|inspired by|classic|warm|analog)\b",
     re.IGNORECASE,
 )
 
@@ -81,9 +82,13 @@ async def run_llm_tools(state: AgentState) -> dict:
     messages = list(state.get("messages") or [])
     resolved_intent = state.get("resolved_intent")
     daw_context = state.get("daw_context")
+    stream_callback = state.get("stream_callback")
 
     reply, generated_music = await client.run_llm_tool_loop(
-        messages, resolved_intent_hint=resolved_intent, daw_context=daw_context
+        messages, 
+        resolved_intent_hint=resolved_intent,
+        daw_context=daw_context,
+        stream_callback=stream_callback
     )
     messages.append({"role": "model", "content": reply})
     return {"messages": messages, "reply": reply, "generated_music": generated_music}
@@ -141,6 +146,7 @@ async def run_agent_graph(
     query: str,
     history: Optional[Sequence[dict[str, str]]] = None,
     daw_context: Optional[Dict[str, Any]] = None,
+    stream_callback: Optional[Any] = None,
 ) -> tuple[str, Optional[Dict[str, Any]]]:
     """Run a single user turn through the LangGraph pipeline.
 
@@ -149,6 +155,7 @@ async def run_agent_graph(
         query: The current user message.
         history: Prior conversation turns (list of ``{role, content}`` dicts).
         daw_context: Optional dict with DAW project settings (tempoBpm, timeSignature).
+        stream_callback: Optional callback for streaming trace events.
 
     Returns:
         ``(reply_text, generated_music_dict_or_none)`` — the latter is set when
@@ -162,6 +169,7 @@ async def run_agent_graph(
         "generated_music": None,
         "mcp_client": client,
         "daw_context": daw_context,
+        "stream_callback": stream_callback,
     }
 
     result = await _COMPILED_GRAPH.ainvoke(initial_state)

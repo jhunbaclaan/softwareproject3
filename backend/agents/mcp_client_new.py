@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import Any, Dict, Optional, List, Literal, Tuple
+from typing import Any, Dict, Optional, List, Literal, Tuple, Callable
 from contextlib import AsyncExitStack
 
 from mcp import ClientSession, StdioServerParameters
@@ -60,6 +60,10 @@ def load_system_instruction() -> str:
         "When the user wants AI-generated audio from a text description (e.g. 'make a 15s lo-fi beat'), "
         f"call the `{GENERATE_MUSIC_TOOL_NAME}` tool with their prompt. Do not use this for ABC notation "
         "(use add-abc-track instead).\n\n"
+        "RESPONSE FORMAT:\n"
+        "Always respond in plain text. Do not use any markdown formatting such as "
+        "bold (**), italic (*), headers (#), bullet points (-), numbered lists, "
+        "or code blocks. Do not use emojis. Keep responses concise and conversational.\n\n"
     )
     
     skills_dir = os.path.join(os.path.dirname(__file__), "skills")
@@ -413,6 +417,7 @@ class MCPClient:
         contents: list,
         config: types.GenerateContentConfig,
         max_iterations: int = 40,
+        stream_callback: Optional[Any] = None,
     ) -> tuple[list, str, Optional[Dict[str, Any]]]:
         """Run the Gemini <-> MCP tool-calling loop.
 
@@ -449,13 +454,23 @@ class MCPClient:
                         tool_args = dict(fc.args) if fc.args else {}
 
                         print(f"[MCP Client] Calling tool: {tool_name} with args: {tool_args}")
+                        trace_id = None
+                        if stream_callback:
+                            import uuid
+                            trace_id = str(uuid.uuid4())
+                            await stream_callback({"type": "trace", "data": {"id": trace_id, "label": f"{tool_name}", "detail": str(tool_args), "status": "running"}})
+
                         try:
                             result_str, attach = await self._dispatch_tool(tool_name, tool_args)
                             if attach is not None:
                                 music_attachment = attach
+                            if stream_callback:
+                                await stream_callback({"type": "trace_update", "data": {"id": trace_id, "status": "done", "detail": "Completed"}})
                         except Exception as e:
                             result_str = f"Error calling tool {tool_name}: {str(e)}"
                             print(f"[MCP Client] Tool call FAILED: {result_str}")
+                            if stream_callback:
+                                await stream_callback({"type": "trace_update", "data": {"id": trace_id, "status": "error", "detail": str(e)}})
                         last_tool_result = result_str
                         print(f"[MCP Client] Tool result: {result_str[:200]}...")
 
@@ -494,6 +509,7 @@ class MCPClient:
         messages: list,
         system: str = SYSTEM_INSTRUCTION,
         max_iterations: int = 40,
+        stream_callback: Optional[Any] = None,
     ) -> tuple[list, str, Optional[Dict[str, Any]]]:
         """Run the Anthropic Claude <-> MCP tool-calling loop.
 
@@ -546,13 +562,23 @@ class MCPClient:
                 tool_name = block.name
                 tool_args = block.input if isinstance(block.input, dict) else {}
                 print(f"[MCP Client] Calling tool: {tool_name} with args: {tool_args}")
+                trace_id = None
+                if stream_callback:
+                    import uuid
+                    trace_id = str(uuid.uuid4())
+                    await stream_callback({"type": "trace", "data": {"id": trace_id, "label": f"{tool_name}", "detail": str(tool_args), "status": "running"}})
+
                 try:
                     result_str, attach = await self._dispatch_tool(tool_name, tool_args)
                     if attach is not None:
                         music_attachment = attach
+                    if stream_callback:
+                        await stream_callback({"type": "trace_update", "data": {"id": trace_id, "status": "done", "detail": "Completed"}})
                 except Exception as e:
                     result_str = f"Error calling tool {tool_name}: {str(e)}"
                     print(f"[MCP Client] Tool call FAILED: {result_str}")
+                    if stream_callback:
+                        await stream_callback({"type": "trace_update", "data": {"id": trace_id, "status": "error", "detail": str(e)}})
                 print(f"[MCP Client] Tool result: {result_str[:200]}...")
                 tool_results.append({
                     "type": "tool_result",
@@ -576,6 +602,7 @@ class MCPClient:
         messages: list[dict],
         system: str = SYSTEM_INSTRUCTION,
         max_iterations: int = 40,
+        stream_callback: Optional[Any] = None,
     ) -> tuple[list[dict], str, Optional[Dict[str, Any]]]:
         """Run the OpenAI chat completions <-> MCP tool-calling loop.
 
@@ -633,13 +660,23 @@ class MCPClient:
                 except json.JSONDecodeError:
                     tool_args = {}
                 print(f"[MCP Client] Calling tool: {tool_name} with args: {tool_args}")
+                trace_id = None
+                if stream_callback:
+                    import uuid
+                    trace_id = str(uuid.uuid4())
+                    await stream_callback({"type": "trace", "data": {"id": trace_id, "label": f"{tool_name}", "detail": str(tool_args), "status": "running"}})
+
                 try:
                     result_str, attach = await self._dispatch_tool(tool_name, tool_args)
                     if attach is not None:
                         music_attachment = attach
+                    if stream_callback:
+                        await stream_callback({"type": "trace_update", "data": {"id": trace_id, "status": "done", "detail": "Completed"}})
                 except Exception as e:
                     result_str = f"Error calling tool {tool_name}: {str(e)}"
                     print(f"[MCP Client] Tool call FAILED: {result_str}")
+                    if stream_callback:
+                        await stream_callback({"type": "trace_update", "data": {"id": trace_id, "status": "error", "detail": str(e)}})
                 print(f"[MCP Client] Tool result: {result_str[:200]}...")
                 request_messages.append({
                     "role": "tool",
@@ -680,6 +717,7 @@ class MCPClient:
         messages: list[dict],
         resolved_intent_hint: Optional[str] = None,
         daw_context: Optional[Dict[str, Any]] = None,
+        stream_callback: Optional[Any] = None,
     ) -> tuple[str, Optional[Dict[str, Any]]]:
         """Provider-agnostic: run the appropriate LLM + MCP tool loop.
 
@@ -709,7 +747,7 @@ class MCPClient:
             if daw_hint:
                 api_messages.append({"role": "user", "content": daw_hint})
             _, reply, music = await self.run_tool_loop_anthropic(
-                api_messages, system=SYSTEM_INSTRUCTION
+                api_messages, system=SYSTEM_INSTRUCTION, stream_callback=stream_callback
             )
             return reply, music
 
@@ -730,7 +768,7 @@ class MCPClient:
             if daw_hint:
                 api_messages.append({"role": "user", "content": daw_hint})
             _, reply, music = await self.run_tool_loop_openai(
-                api_messages, system=SYSTEM_INSTRUCTION
+                api_messages, system=SYSTEM_INSTRUCTION, stream_callback=stream_callback
             )
             return reply, music
 
@@ -763,7 +801,7 @@ class MCPClient:
                     role="user",
                 )
             )
-        _, reply, music = await self.run_tool_loop(contents, config)
+        _, reply, music = await self.run_tool_loop(contents, config, stream_callback=stream_callback)
         return reply, music
 
     # ------------------------------------------------------------------

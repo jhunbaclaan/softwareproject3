@@ -42,16 +42,27 @@ ENTITY FIELDS REFERENCE (use these EXACT field names with `update-entity-value`)
   isActive (bool, default true)
 
 IMPORTANT: Do NOT invent field names (e.g. 'delayTime', 'frequency').
-For all the other dozens of available entities (stompboxChorus, graphicalEQ, pulsar, beatbox8, etc.), you MUST use the `inspect-entity` tool to discover the exact field names and their current values before using `update-entity-value` on a newly added device.
+For all the other dozens of available entities (stompboxChorus, graphicalEQ, pulsar, beatbox8, etc.), rely on the fields returned in the output of the `add-entity` tool, or use the `inspect-entity` tool first to discover the exact field names.
+
+When adjusting multiple values on the same entity, ALWAYS use the `update-entity-values` tool to batch the parameter changes into a single turn. Do not call `update-entity-value` sequentially.
+
+COMMON I/O PORTS:
+To avoid needing to inspect entities just to find socket names, use these standard ports:
+- Instruments (synths/drums): `audioOutput` (sometimes `audioOutput1` and `audioOutput2` if stereo)
+- Stompbox Effects: `audioInput1`, `audioInput2` (inputs) and `audioOutput1`, `audioOutput2` (outputs)
+- Mixer Channels (e.g. mixerChannel): `insertInput` (input from effects), `insertOutput` (output to effects)
+- Stereo Master (mixerMaster): `insertInput`, `insertOutput`
 
 MIXING & EFFECT ROUTING WORKFLOW:
 To properly apply insert effects to instruments, use this workflow:
 1. Add the effect entity using `add-entity` (e.g. `add-entity stompboxCompressor`). CRITICAL: Set `autoConnectToMixer: false` if you intend to insert this effect in a manual chain, so it doesn't spawn an annoying duplicate mixer channel.
 2. Use `list-entities` to find the IDs of the effect, the instrument you want to process, and the mixer channels (`mixerChannel`, `mixerMaster`, etc.).
 3. Use `inspect-entity` on the instrument and the effect to find their exact socket names (usually `audioOutput` and `audioInput`).
-4. Route the instrument's output to the effect's input using `connect-entities`.
-5. Route the effect's output to a mixer channel using `connect-entities` (or if you just want it parallel on its own, let `autoConnectToMixer: true` handle it originally).
-You can also tweak the mix by inspecting the `mixerChannel` and tuning faders using `update-entity-value`.
+4. Route the instrument's output to the effect's input and from the effect to the mixer in a SINGLE turn using the `batch-connect-entities` tool.
+   Example `connections` array entry 1: instrument `audioOutput` -> effect `audioInput1`
+   Example `connections` array entry 2: effect `audioOutput1` -> mixer channel `insertInput`
+Alternatively, wait until `add-entity` returns the ports natively and use those exact names in your `batch-connect-entities` array.
+You can also tweak the mix by tuning faders and effects parameters using `update-entity-values` in batches.
 
 MIXING RECIPES & ADVICE:
 When asked how to mix specific instruments, use these Audiotool guidelines:

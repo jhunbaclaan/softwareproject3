@@ -104,19 +104,31 @@ async function createSampleWithFallbacks(
   let lastDetail = 'CreateSample failed for unknown reason.';
 
   for (let i = 0; i < candidates.length; i++) {
-    const { request } = candidates[i];
+    const { label, request } = candidates[i];
+    console.log(`[createSample] Trying candidate ${i} (${label})…`);
     const result = await client.api.sampleService.createSample(request as any);
 
     if (!isGrpcErrorResult(result)) {
       const sample = result.sample;
       const uploadEndpoint = result.uploadEndpoint;
       if (sample?.name && uploadEndpoint?.uploadUrl) {
+        console.log(`[createSample] Success with candidate ${i} (${label}), sample: ${sample.name}`);
         return { sample: { name: sample.name }, uploadEndpoint };
       }
       lastDetail = 'CreateSample returned no sample name or upload URL.';
+      console.warn(`[createSample] Candidate ${i} returned OK but missing name/uploadUrl`, result);
       continue;
     }
 
+    const errObj = result as any;
+    console.error(`[createSample] Candidate ${i} (${label}) failed:`, {
+      message: errObj.message,
+      code: errObj.code,
+      details: errObj.details,
+      metadata: errObj.metadata,
+      name: errObj.name,
+      stack: errObj.stack,
+    });
     lastDetail = formatApiError(result);
     if (isLikelyValidationErrorText(lastDetail) && i < candidates.length - 1) {
       continue;
@@ -124,7 +136,10 @@ async function createSampleWithFallbacks(
     break;
   }
 
-  const scopeHint = isLikelyScopeOrPermissionText(lastDetail) ? SAMPLE_WRITE_SCOPE_HINT : '';
+  const isGenericSdkError = lastDetail.includes('.createSample threw error');
+  const scopeHint = (isGenericSdkError || isLikelyScopeOrPermissionText(lastDetail))
+    ? SAMPLE_WRITE_SCOPE_HINT
+    : '';
   throw new Error(`${lastDetail}${scopeHint}`);
 }
 

@@ -1,12 +1,14 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
+import json
 import os
 import logging
 from agents.mcp_client_new import MCPClient
 from agents.graph import run_agent_graph
-from models import AgentRequest, AgentResponse, GeneratedMusicAttachment
+from models import TraceItem, AgentRequest, AgentResponse, GeneratedMusicAttachment
 from routes.music import router as music_router
 
 logger = logging.getLogger(__name__)
@@ -130,31 +132,56 @@ def health():
 
 
 @app.post("/agent/run")
-async def run_agent(request: AgentRequest) -> AgentResponse:
-    """Process a user query through the LLM (Gemini or Anthropic) + MCP agent."""
+async def run_agent(request: AgentRequest):
+    """Process a user query and stream events (traces/reply) to the frontend."""
     try:
         client = await _ensure_client(request)
         client.set_elevenlabs_api_key(request.elevenlabsApiKey)
-
-        history = None
-        if request.messages:
-            history = [{"role": m.role, "content": m.content} for m in request.messages]
-
-        daw_context = None
-        if request.dawContext:
-            daw_context = request.dawContext.model_dump(exclude_none=True) or None
-
-        reply, raw_music = await run_agent_graph(
-            client, request.prompt, history=history, daw_context=daw_context
-        )
-        generated = (
-            GeneratedMusicAttachment(**raw_music) if raw_music else None
-        )
-        return AgentResponse(reply=reply, trace=None, generated_music=generated)
-
     except Exception as e:
-        error_msg = f"Agent error: {str(e)}"
-        return AgentResponse(reply=error_msg, trace=None)
+        error_msg = str(e)
+        async def error_early():
+            yield f"data: {json.dumps({'type': 'error', 'data': {'error': error_msg}})}\n\n"
+        return StreamingResponse(error_early(), media_type="text/event-stream")
+
+    history = None
+    if request.messages:
+        history = [{"role": m.role, "content": m.content} for m in request.messages]
+
+    daw_context = None
+    if request.dawContext:
+        daw_context = request.dawContext.model_dump(exclude_none=True) or None
+
+    async def event_generator():
+        queue = asyncio.Queue()
+
+        async def stream_callback(event: dict):
+            await queue.put(event)
+
+        async def run_task():
+            try:
+                reply, raw_music = await run_agent_graph(
+                    client, request.prompt, history=history, daw_context=daw_context, stream_callback=stream_callback
+                )
+                generated = (
+                    GeneratedMusicAttachment(**raw_music).model_dump() if raw_music else None
+                )
+                await queue.put({"type": "reply", "data": {"reply": reply, "generated_music": generated}})
+            except Exception as e:
+                await queue.put({"type": "error", "data": {"error": f"Agent error: {str(e)}"}})
+            finally:
+                await queue.put(None)
+
+        task = asyncio.create_task(run_task())
+
+        while True:
+            event = await queue.get()
+            if event is None:
+                break
+            yield f"data: {json.dumps(event)}\n\n"
+
+        await task
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 if __name__ == "__main__":

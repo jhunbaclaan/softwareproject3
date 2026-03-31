@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="68" failures="0" errors="0" time="0.0306675">
+    <testsuite name="tests/server-utils.test.ts" timestamp="2026-03-31T21:39:22.284Z" hostname="Josh-Tower" tests="56" failures="0" errors="0" skipped="1" time="0.0212901">
+        <testcase classname="tests/server-utils.test.ts" name="Levenshtein Distance &gt; should return 0 for identical strings" time="0.0009959">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Levenshtein Distance &gt; should return correct distance for single substitution" time="0.0001676">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Levenshtein Distance &gt; should return correct distance for single deletion" time="0.0000941">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Levenshtein Distance &gt; should return correct distance for single insertion" time="0.0001127">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Levenshtein Distance &gt; should return correct distance for completely different strings" time="0.0000915">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Levenshtein Distance &gt; should be case-sensitive" time="0.0001113">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Levenshtein Distance &gt; should handle empty strings" time="0.0001752">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Entity Type Resolution &gt; should resolve exact entity type matches" time="0.0001546">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Entity Type Resolution &gt; should resolve case-insensitive entity types" time="0.000312">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Entity Type Resolution &gt; should resolve entity type aliases" time="0.0001711">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Entity Type Resolution &gt; should resolve fuzzy entity type matches within distance 3" time="0.0008062">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Entity Type Resolution &gt; should return null for very distant strings" time="0.0010535">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Entity Type Resolution &gt; should prefer exact match over fuzzy match" time="0.0000602">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Entity Type Resolution &gt; should trim whitespace" time="0.0000691">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Instrument Type Resolution &gt; should resolve exact instrument types" time="0.0001002">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Instrument Type Resolution &gt; should resolve instrument aliases" time="0.0000991">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Instrument Type Resolution &gt; should resolve orchestral instruments to gakki" time="0.0000933">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Instrument Type Resolution &gt; should handle fuzzy instrument matching" time="0.001301">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Instrument Type Resolution &gt; should return null for unknown instruments" time="0.0001207">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Gakki Preset Resolution &gt; should handle synonym lookups" time="0.0001008">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Gakki Preset Resolution &gt; should return undefined for unknown instrument names" time="0.0001256">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Gakki Preset Resolution &gt; should normalize input (lowercase, underscores)" time="0.0000981">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Gakki Preset Resolution &gt; should resolve direct GM name lookups when data available" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Gakki Preset Resolution &gt; should prioritize orchestralVoice over instrument in hints" time="0.0003742">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="ABC Notation Parsing &gt; should parse valid ABC notation and return notes" time="0.0052309">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="ABC Notation Parsing &gt; should sort notes by positionTicks" time="0.0015082">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="ABC Notation Parsing &gt; should use default velocity of 0.7 when volume not specified" time="0.0005301">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="ABC Notation Parsing &gt; should enforce minimum duration of TICKS_QUARTER/4" time="0.0003794">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="ABC Notation Parsing &gt; should return empty array or throw on empty input" time="0.0004926">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="ABC Notation Parsing &gt; should clamp pitch to 0-127 range" time="0.0005782">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Style Recommendation &gt; should recommend bassline for Daft Punk" time="0.0000989">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Style Recommendation &gt; should recommend machiniste for drum keywords" time="0.0001082">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Style Recommendation &gt; should recommend heisenberg for pads and chords" time="0.0000863">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Style Recommendation &gt; should recommend tonematrix for sequences and arpeggios" time="0.0000527">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Style Recommendation &gt; should default to heisenberg for unknown styles" time="0.0001203">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Style Recommendation &gt; should be case-insensitive" time="0.000052">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Tick Constants &gt; should have correct TICKS_WHOLE value" time="0.0000797">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Tick Constants &gt; should have correct TICKS_QUARTER value" time="0.0000768">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Tick Constants &gt; should have TICKS_WHOLE = 4 * TICKS_QUARTER" time="0.0000679">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Audio Output Field Mapping &gt; should map heisenberg to audioOutput" time="0.0000413">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Audio Output Field Mapping &gt; should map machiniste to mainOutput" time="0.0000507">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Audio Output Field Mapping &gt; should map beatbox8 to mainOutput" time="0.0000295">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Audio Output Field Mapping &gt; should map audioSplitter to audioOutput1" time="0.0000502">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Audio Output Field Mapping &gt; should map bandSplitter to highOutput" time="0.000031">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="connectDeviceToStagebox &gt; should create mixer channel and cable for known entity types" time="0.0002318">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="connectDeviceToStagebox &gt; should not create anything for unknown entity types" time="0.0000478">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="connectDeviceToStagebox &gt; should not create anything if output field has no location" time="0.0000555">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="connectDeviceToStagebox &gt; should use machiniste mainOutput field" time="0.0001085">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="connectDeviceToStagebox &gt; should calculate correct orderAmongStrips with existing strips" time="0.0001316">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="setHeisenbergOperatorAGain &gt; should update operator A gain field" time="0.0001028">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="setHeisenbergOperatorAGain &gt; should handle missing operatorA gracefully" time="0.0000657">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Constants Integrity &gt; should have all NOTE_TRACK_INSTRUMENTS in VALID_ENTITY_TYPES" time="0.0008337">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Constants Integrity &gt; should have all ENTITY_TYPE_ALIASES pointing to valid types" time="0.000541">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Constants Integrity &gt; should have all INSTRUMENT_ALIASES pointing to valid note track instruments or gakki/heisenberg" time="0.0003943">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Constants Integrity &gt; should have all AUDIO_OUTPUT_FIELD keys be valid entity types or known types" time="0.0003871">
+        </testcase>
+        <testcase classname="tests/server-utils.test.ts" name="Constants Integrity &gt; should have all STYLE_MAP values pointing to valid entity types" time="0.000268">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/server.test.ts" timestamp="2026-03-31T21:39:22.293Z" hostname="Josh-Tower" tests="1" failures="0" errors="0" skipped="0" time="0.0017439">
+        <testcase classname="tests/server.test.ts" name="MCP Server &gt; should initialize without crashing" time="0.0009428">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/token-manager.test.ts" timestamp="2026-03-31T21:39:22.293Z" hostname="Josh-Tower" tests="11" failures="0" errors="0" skipped="0" time="0.0076335">
+        <testcase classname="tests/token-manager.test.ts" name="TokenManager &gt; getToken returns accessToken if not expired" time="0.0016392">
+        </testcase>
+        <testcase classname="tests/token-manager.test.ts" name="TokenManager &gt; getToken refreshes token if expired" time="0.0012714">
+            <system-err>
+[TokenManager] Refreshing access token...
+
+[TokenManager] Access token refreshed successfully
+[TokenManager] Token will expire at: 2026-03-31T22:39:22.185Z
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/token-manager.test.ts" name="TokenManager &gt; getToken throws error if expired and no refresh token" time="0.0007889">
+        </testcase>
+        <testcase classname="tests/token-manager.test.ts" name="TokenManager &gt; should deduplicate simultaneous refresh requests" time="0.000479">
+            <system-err>
+[TokenManager] Refreshing access token...
+
+[TokenManager] Access token refreshed successfully
+[TokenManager] Token will expire at: 2026-03-31T22:39:22.186Z
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/token-manager.test.ts" name="TokenManager &gt; should handle OAuth error response from refresh" time="0.0003389">
+            <system-err>
+[TokenManager] Refreshing access token...
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/token-manager.test.ts" name="TokenManager &gt; should trigger refresh at the expiry buffer boundary (60s)" time="0.0005381">
+            <system-err>
+[TokenManager] Refreshing access token...
+
+[TokenManager] Access token refreshed successfully
+[TokenManager] Token will expire at: 2026-03-31T23:39:22.187Z
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/token-manager.test.ts" name="TokenManager &gt; should update expiresAt correctly after refresh" time="0.0003929">
+            <system-err>
+[TokenManager] Refreshing access token...
+
+[TokenManager] Access token refreshed successfully
+[TokenManager] Token will expire at: 2026-03-31T23:39:22.188Z
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/token-manager.test.ts" name="TokenManager &gt; should use rotated refresh token for subsequent refreshes" time="0.0004365">
+            <system-err>
+[TokenManager] Refreshing access token...
+
+[TokenManager] Access token refreshed successfully
+[TokenManager] Token will expire at: 2026-03-31T21:39:23.188Z
+
+[TokenManager] Refreshing access token...
+
+[TokenManager] Access token refreshed successfully
+[TokenManager] Token will expire at: 2026-03-31T23:39:22.188Z
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/token-manager.test.ts" name="TokenManager &gt; should throw on HTTP error from token endpoint" time="0.000456">
+            <system-err>
+[TokenManager] Refreshing access token...
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/token-manager.test.ts" name="TokenManager &gt; isValid returns true when token is not expired" time="0.0001707">
+        </testcase>
+        <testcase classname="tests/token-manager.test.ts" name="TokenManager &gt; isValid returns false when token is within expiry buffer" time="0.0001338">
+        </testcase>
+    </testsuite>
+</testsuites>
