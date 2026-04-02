@@ -1,10 +1,16 @@
+import os
+from dotenv import load_dotenv
+
+_backend_dir = os.path.dirname(os.path.abspath(__file__))
+_project_root = os.path.dirname(_backend_dir)
+load_dotenv(os.path.join(_project_root, ".env"))
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import json
-import os
 import logging
 from agents.mcp_client_new import MCPClient
 from agents.graph import run_agent_graph
