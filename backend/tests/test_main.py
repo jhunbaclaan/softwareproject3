@@ -27,10 +27,12 @@ async def test_health_check():
 
 @pytest.mark.asyncio
 async def test_agent_run():
-    with patch("main._ensure_client") as mock_ensure, \
+    with patch("main._ensure_client", new_callable=AsyncMock) as mock_ensure, \
          patch("main.run_agent_graph") as mock_run:
 
-        mock_ensure.return_value = AsyncMock()
+        mock_client = AsyncMock()
+        mock_client.set_elevenlabs_api_key = MagicMock()
+        mock_ensure.return_value = mock_client
         mock_run.return_value = ("Agent reply", None)
 
         request_data = {"prompt": "add synth"}
@@ -120,10 +122,12 @@ async def test_client_recreated_when_llm_provider_changes(sample_agent_request, 
 @pytest.mark.asyncio
 async def test_agent_run_with_gemini():
     """Test agent execution with Gemini provider."""
-    with patch("main._ensure_client") as mock_ensure, \
+    with patch("main._ensure_client", new_callable=AsyncMock) as mock_ensure, \
          patch("main.run_agent_graph") as mock_run:
 
-        mock_ensure.return_value = AsyncMock()
+        mock_client = AsyncMock()
+        mock_client.set_elevenlabs_api_key = MagicMock()
+        mock_ensure.return_value = mock_client
         mock_run.return_value = ("Gemini response", None)
 
         request_data = {
@@ -142,10 +146,12 @@ async def test_agent_run_with_gemini():
 @pytest.mark.asyncio
 async def test_agent_run_with_anthropic():
     """Test agent execution with Anthropic provider."""
-    with patch("main._ensure_client") as mock_ensure, \
+    with patch("main._ensure_client", new_callable=AsyncMock) as mock_ensure, \
          patch("main.run_agent_graph") as mock_run:
 
-        mock_ensure.return_value = AsyncMock()
+        mock_client = AsyncMock()
+        mock_client.set_elevenlabs_api_key = MagicMock()
+        mock_ensure.return_value = mock_client
         mock_run.return_value = ("Anthropic response", None)
 
         request_data = {
@@ -164,10 +170,12 @@ async def test_agent_run_with_anthropic():
 @pytest.mark.asyncio
 async def test_agent_run_with_openai():
     """Test agent execution with OpenAI provider."""
-    with patch("main._ensure_client") as mock_ensure, \
+    with patch("main._ensure_client", new_callable=AsyncMock) as mock_ensure, \
          patch("main.run_agent_graph") as mock_run:
 
-        mock_ensure.return_value = AsyncMock()
+        mock_client = AsyncMock()
+        mock_client.set_elevenlabs_api_key = MagicMock()
+        mock_ensure.return_value = mock_client
         mock_run.return_value = ("OpenAI response", None)
 
         request_data = {
@@ -188,10 +196,11 @@ async def test_agent_run_with_openai():
 @pytest.mark.asyncio
 async def test_agent_run_with_auth_tokens(sample_auth_tokens):
     """Test agent with valid auth tokens."""
-    with patch("main._ensure_client") as mock_ensure, \
+    with patch("main._ensure_client", new_callable=AsyncMock) as mock_ensure, \
          patch("main.run_agent_graph") as mock_run:
 
         mock_client = AsyncMock()
+        mock_client.set_elevenlabs_api_key = MagicMock()
         mock_ensure.return_value = mock_client
         mock_run.return_value = ("Success with auth", None)
 
@@ -212,10 +221,12 @@ async def test_agent_run_with_auth_tokens(sample_auth_tokens):
 @pytest.mark.asyncio
 async def test_agent_run_without_auth_tokens():
     """Test agent without auth tokens (should still work)."""
-    with patch("main._ensure_client") as mock_ensure, \
+    with patch("main._ensure_client", new_callable=AsyncMock) as mock_ensure, \
          patch("main.run_agent_graph") as mock_run:
 
-        mock_ensure.return_value = AsyncMock()
+        mock_client = AsyncMock()
+        mock_client.set_elevenlabs_api_key = MagicMock()
+        mock_ensure.return_value = mock_client
         mock_run.return_value = ("Success without auth", None)
 
         request_data = {"prompt": "test"}
@@ -233,10 +244,12 @@ async def test_agent_run_without_auth_tokens():
 @pytest.mark.asyncio
 async def test_agent_run_with_conversation_history():
     """Test agent with prior conversation messages."""
-    with patch("main._ensure_client") as mock_ensure, \
+    with patch("main._ensure_client", new_callable=AsyncMock) as mock_ensure, \
          patch("main.run_agent_graph") as mock_run:
 
-        mock_ensure.return_value = AsyncMock()
+        mock_client = AsyncMock()
+        mock_client.set_elevenlabs_api_key = MagicMock()
+        mock_ensure.return_value = mock_client
         mock_run.return_value = ("Contextual response", None)
 
         request_data = {
@@ -257,10 +270,12 @@ async def test_agent_run_with_conversation_history():
 @pytest.mark.asyncio
 async def test_agent_run_with_empty_history():
     """Test agent with no prior conversation."""
-    with patch("main._ensure_client") as mock_ensure, \
+    with patch("main._ensure_client", new_callable=AsyncMock) as mock_ensure, \
          patch("main.run_agent_graph") as mock_run:
 
-        mock_ensure.return_value = AsyncMock()
+        mock_client = AsyncMock()
+        mock_client.set_elevenlabs_api_key = MagicMock()
+        mock_ensure.return_value = mock_client
         mock_run.return_value = ("Fresh start", None)
 
         request_data = {"prompt": "hello"}

@@ -55,6 +55,7 @@ def sample_agent_request_no_auth() -> AgentRequest:
 def mock_mcp_client():
     """Reusable mock MCP client."""
     client = AsyncMock()
+    client.set_elevenlabs_api_key = MagicMock()
     client.session = AsyncMock()
     client.run_llm_tool_loop = AsyncMock(return_value="Agent response")
     client.cleanup = AsyncMock()
