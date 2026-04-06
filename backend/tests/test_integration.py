@@ -22,7 +22,7 @@ def _parse_sse_reply(response):
                 return event["data"]
     return {}
 
-from fixtures import mock_mcp_client, mock_elevenlabs_client, sample_auth_tokens
+from tests.fixtures import mock_mcp_client, mock_elevenlabs_client, sample_auth_tokens
 
 
 # ---------------------------------------------------------------------------

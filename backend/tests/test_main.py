@@ -2,7 +2,7 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 from main import app, _ensure_client, _client, _client_project_url, _client_llm_provider
 from unittest.mock import patch, AsyncMock, MagicMock
-from fixtures import sample_agent_request, sample_agent_request_no_auth, sample_auth_tokens, mock_mcp_client
+from tests.fixtures import sample_agent_request, sample_agent_request_no_auth, sample_auth_tokens, mock_mcp_client
 
 import json as _json
 

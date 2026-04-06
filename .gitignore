@@ -15,3 +15,4 @@ storage/
 /.claude
 /.aiassistant
 /test-results/
+/pyrightconfig.json
