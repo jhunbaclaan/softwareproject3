@@ -247,9 +247,9 @@ export default function App() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   const tutorialSteps = [
-    { title: 'Console', text: 'This is the console where you can log in and manage your projects.' },
-    { title: 'Chat Box', text: 'This is the chat box where you can talk to the agent, paste ABC notation, or ask for music.' },
-    { title: 'Settings Cogwheel', text: 'This is the settings cogwheel to customize your experience.' }
+    { title: 'Console', text: 'This is the console where you can log in and manage your projects. Click "Connect" to connect to a project or "New Project" to create a new project. Click the arrow next the project name to open it in a new tab.' },
+    { title: 'Chat Box', text: 'This is the chat box where you can talk to the agent, paste ABC notation, generate music, or learn how to use the DAW.' },
+    { title: 'Settings Menu', text: 'Open the Settings Menu to customize your experience and input your API keys.' }
   ];
 
   const nextTutorialStep = () => {
@@ -260,6 +260,12 @@ export default function App() {
       if (typeof window !== 'undefined') {
         window.localStorage.setItem('tutorialCompleted', 'true');
       }
+    }
+  };
+
+  const prevTutorialStep = () => {
+    if (tutorialStep > 1) {
+      setTutorialStep(tutorialStep - 1);
     }
   };
 
@@ -300,8 +306,13 @@ export default function App() {
         root.setAttribute('data-reduce-motion', 'true');
         window.localStorage.setItem('reduceMotion', 'true');
       } else {
+        root.classList.add('no-transition-guard');
         root.removeAttribute('data-reduce-motion');
         window.localStorage.setItem('reduceMotion', 'false');
+        void root.offsetHeight;
+        requestAnimationFrame(() => {
+          root.classList.remove('no-transition-guard');
+        });
       }
     }
   }, [reduceMotion]);
@@ -751,7 +762,14 @@ export default function App() {
     projectStatus === 'connected' && connectedProjectName === p.name;
 
   return (
-    <div className="page">
+    <div
+      className="page animate-in"
+      onAnimationEnd={(e) => {
+        if (e.animationName === 'fadeIn') {
+          e.currentTarget.classList.remove('animate-in');
+        }
+      }}
+    >
       <div className="app-layout">
         <aside className="sidebar">
           <div className="sidebar-brand">
@@ -928,7 +946,15 @@ export default function App() {
                 </div>
               ) : (
                 messages.map((message) => (
-                  <div key={message.id} className={`message ${message.role}`}>
+                  <div
+                    key={message.id}
+                    className={`message ${message.role} animate-in`}
+                    onAnimationEnd={(e) => {
+                      if (e.animationName === 'floatIn') {
+                        e.currentTarget.classList.remove('animate-in');
+                      }
+                    }}
+                  >
                     <div className="message-meta">
                       <span className="role">{message.role}</span>
                       {showTimestamps && <span className="time">{message.timestamp}</span>}
@@ -983,7 +1009,14 @@ export default function App() {
         </div>
 
         {settingsSidebarOpen && (
-          <aside className="settings-sidebar">
+          <aside
+            className="settings-sidebar animate-in"
+            onAnimationEnd={(e) => {
+              if (e.animationName === 'slideInFromRight') {
+                e.currentTarget.classList.remove('animate-in');
+              }
+            }}
+          >
             <div className="settings-header">
               <h3>Settings</h3>
               <button
@@ -1190,7 +1223,7 @@ export default function App() {
                   </select>
                 </div>
                 <div className="setting-item">
-                  <span className="setting-label">LLM API Key (optional)</span>
+                  <span className="setting-label">LLM API Key</span>
                   <input
                     type="password"
                     value={llmApiKey}
@@ -1227,7 +1260,15 @@ export default function App() {
       </div>
 
       {tutorialStep > 0 && tutorialStep <= tutorialSteps.length && (
-        <div className="tutorial-overlay" onClick={skipTutorial}>
+        <div
+          className="tutorial-overlay animate-in"
+          onClick={skipTutorial}
+          onAnimationEnd={(e) => {
+            if (e.animationName === 'fadeIn') {
+              e.currentTarget.classList.remove('animate-in');
+            }
+          }}
+        >
           <div
             className={`tutorial-modal arrow-${tutorialStep === 1 ? 'left' : tutorialStep === 2 ? 'bottom' : 'right'}`}
             onClick={(e) => e.stopPropagation()}
@@ -1240,7 +1281,12 @@ export default function App() {
             <h2>{tutorialSteps[tutorialStep - 1].title}</h2>
             <p>{tutorialSteps[tutorialStep - 1].text}</p>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-              <button onClick={skipTutorial}>Skip Tutorial</button>
+              {tutorialStep > 1 && (
+                <button onClick={prevTutorialStep}>Go Back</button>
+              )}
+              {tutorialStep < tutorialSteps.length && (
+                <button onClick={skipTutorial}>Skip Tutorial</button>
+              )}
               <button onClick={nextTutorialStep}>
                 {tutorialStep === tutorialSteps.length ? 'Finish' : 'Next'}
               </button>

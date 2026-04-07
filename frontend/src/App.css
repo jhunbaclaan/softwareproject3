@@ -31,6 +31,8 @@
     --status-warn: #b46b36;
     --button-disabled: #b7c6c5;
     --toggle-bg: #fff;
+    --toggle-track: #e2ded4;
+    --button-text: #ffffff;
     --message-gap: 12px;
 }
 
@@ -60,6 +62,8 @@
     --status-warn: #d98f5a;
     --button-disabled: #4a5157;
     --toggle-bg: #e8eaed;
+    --toggle-track: #3e4449;
+    --button-text: #ffffff;
 }
 
 :root[data-high-contrast="true"] {
@@ -87,6 +91,8 @@
     --status-warn: #000000;
     --button-disabled: #999999;
     --toggle-bg: #ffffff;
+    --toggle-track: #999999;
+    --button-text: #ffffff;
 }
 
 :root[data-theme="dark"][data-high-contrast="true"] {
@@ -113,7 +119,9 @@
     --active-project-border: #ffffff;
     --status-warn: #ffffff;
     --button-disabled: #555555;
-    --toggle-bg: #ffffff;
+    --toggle-bg: #000000;
+    --toggle-track: #666666;
+    --button-text: #000000;
 }
 
 * {
@@ -247,6 +255,9 @@ body {
 .page {
     height: 100vh;
     overflow: hidden;
+}
+
+.page.animate-in {
     animation: fadeIn 0.4s ease-out;
 }
 
@@ -481,6 +492,9 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+}
+
+.settings-sidebar.animate-in {
     animation: slideInFromRight 0.3s ease-out;
 }
 
@@ -562,7 +576,7 @@ body {
     position: relative;
     width: 48px;
     height: 26px;
-    background: var(--border);
+    background: var(--toggle-track);
     border-radius: 13px;
     cursor: pointer;
     transition: background 0.2s;
@@ -671,7 +685,7 @@ body {
     padding: 6px 10px;
     font-size: 0.79rem;
     background: var(--muted);
-    color: #fff;
+    color: var(--button-text);
     border: none;
     border-radius: 6px;
     cursor: pointer;
@@ -754,7 +768,7 @@ input[type="number"] {
     font-size: 0.71rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: #fff;
+    color: var(--button-text);
     flex-shrink: 0;
 }
 
@@ -853,8 +867,11 @@ input[type="number"] {
     padding: 12px 14px;
     border-radius: 14px;
     background: var(--message-bg);
-    animation: floatIn 0.25s ease-out;
     color: var(--ink);
+}
+
+.message.animate-in {
+    animation: floatIn 0.25s ease-out;
 }
 
 .message.user {
@@ -957,7 +974,7 @@ input[type="number"] {
 button {
     border: none;
     background: var(--accent);
-    color: #fff;
+    color: var(--button-text);
     padding: 10px 16px;
     border-radius: 10px;
     font-weight: 600;
@@ -1030,7 +1047,7 @@ button.ghost.tiny {
     font-size: 1.29rem;
     border-radius: 50%;
     background: var(--accent);
-    color: #fff;
+    color: var(--button-text);
     border: 1px solid var(--accent);
     box-shadow: 0 4px 12px rgba(27, 127, 121, 0.2);
     transition: all 0.2s ease;
@@ -1079,7 +1096,8 @@ label {
 
 /* ── Reduce Motion ───────────────────────────── */
 
-:root[data-reduce-motion="true"] * {
+:root[data-reduce-motion="true"] *,
+:root.no-transition-guard * {
     animation: none !important;
     transition: none !important;
 }
@@ -1156,6 +1174,9 @@ label {
     height: 100vh;
     background: rgba(0, 0, 0, 0.5);
     z-index: 1000;
+}
+
+.tutorial-overlay.animate-in {
     animation: fadeIn 0.3s ease-out;
 }
 

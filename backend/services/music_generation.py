@@ -140,8 +140,8 @@ async def generate_music_base64(
     resolved = resolve_elevenlabs_api_key(api_key)
     if not resolved:
         raise ValueError(
-            "No ElevenLabs API key: set elevenlabsApiKey in Developer settings or "
-            "ELEVENLABS_API_KEY on the server."
+            "No ElevenLabs API key found. Please open Settings and enter your "
+            "ElevenLabs API key under \"ElevenLabs API Key\"."
         )
     prompt = clamp_music_prompt(prompt)
     audio = await generate_music_bytes(

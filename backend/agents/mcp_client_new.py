@@ -128,32 +128,23 @@ def load_system_instruction() -> str:
 SYSTEM_INSTRUCTION = load_system_instruction()
 
 
+_PROVIDER_LABELS = {"gemini": "Gemini", "anthropic": "Anthropic", "openai": "OpenAI"}
+_ENV_KEYS = {"gemini": "GEMINI_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}
+
+
 def _resolve_llm_api_key(
     provider: Literal["gemini", "anthropic", "openai"], api_key: Optional[str]
 ) -> str:
     if api_key and api_key.strip():
         return api_key.strip()
-    if provider == "gemini":
-        key = os.getenv("GEMINI_API_KEY")
-        if not key:
-            raise ValueError(
-                "GEMINI_API_KEY environment variable is required (or set llmApiKey in the request)"
-            )
+    key = os.getenv(_ENV_KEYS[provider])
+    if key:
         return key
-    if provider == "anthropic":
-        key = os.getenv("ANTHROPIC_API_KEY")
-        if not key:
-            raise ValueError(
-                "ANTHROPIC_API_KEY environment variable is required (or set llmApiKey in the request)"
-            )
-        return key
-    # openai
-    key = os.getenv("OPENAI_API_KEY")
-    if not key:
-        raise ValueError(
-            "OPENAI_API_KEY environment variable is required (or set llmApiKey in the request)"
-        )
-    return key
+    label = _PROVIDER_LABELS[provider]
+    raise ValueError(
+        f"No {label} API key found. Please open Settings and enter your "
+        f"Gemini, OpenAI, or Anthropic API key under \"LLM API Key\"."
+    )
 
 
 class MCPClient:
@@ -242,7 +233,9 @@ class MCPClient:
         summary = (
             f"Success: generated about {length // 1000}s of "
             f"{'instrumental ' if instrumental else ''}audio ({fmt}). "
-            "The user can play it in the app; if a project is connected, the clip can be added to the timeline."
+            "The sample has been automatically added to the project timeline. "
+            "The user can play it below or in the DAW. "
+            "Do not tell the user to import it — it is already imported."
         )
         return summary, {
             "audio_base64": b64,
