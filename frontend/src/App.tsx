@@ -194,11 +194,17 @@ export default function App() {
     }
     return false;
   });
-  const [highContrast, setHighContrast] = useState(() => {
+  const [dyslexiaFont, setDyslexiaFont] = useState(() => {
     if (typeof window !== 'undefined') {
-      return window.localStorage.getItem('highContrast') === 'true';
+      return window.localStorage.getItem('dyslexiaFont') || 'default';
     }
-    return false;
+    return 'default';
+  });
+  const [colorblindnessTheme, setColorblindnessTheme] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.localStorage.getItem('colorblindnessTheme') || 'none';
+    }
+    return 'none';
   });
   const [showTimestamps, setShowTimestamps] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -236,10 +242,14 @@ export default function App() {
     }
     return 'comfortable';
   });
-  const [tutorialStep, setTutorialStep] = useState(() => {
-    if (typeof window !== 'undefined' && window.localStorage.getItem('tutorialCompleted') === 'true') {
-      return 0;
+  const [buttonStyle, setButtonStyle] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.localStorage.getItem('buttonStyle') || 'filled';
     }
+    return 'filled';
+  });
+  const [tutorialStep, setTutorialStep] = useState(() => {
+    // Always show tutorial on refresh - don't check localStorage
     return 1;
   });
   const [cogwheelPos, setCogwheelPos] = useState({ top: '50px', right: '20px' });
@@ -257,9 +267,6 @@ export default function App() {
       setTutorialStep(tutorialStep + 1);
     } else {
       setTutorialStep(0);
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem('tutorialCompleted', 'true');
-      }
     }
   };
 
@@ -271,9 +278,6 @@ export default function App() {
 
   const skipTutorial = () => {
     setTutorialStep(0);
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('tutorialCompleted', 'true');
-    }
   };
 
   useEffect(() => {
@@ -320,25 +324,41 @@ export default function App() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const root = document.documentElement;
-      if (highContrast) {
-        root.setAttribute('data-high-contrast', 'true');
-        window.localStorage.setItem('highContrast', 'true');
+      if (dyslexiaFont !== 'default') {
+        root.setAttribute('data-dyslexia-font', dyslexiaFont);
+        window.localStorage.setItem('dyslexiaFont', dyslexiaFont);
       } else {
-        root.removeAttribute('data-high-contrast');
-        window.localStorage.setItem('highContrast', 'false');
+        root.removeAttribute('data-dyslexia-font');
+        window.localStorage.setItem('dyslexiaFont', 'default');
       }
     }
-  }, [highContrast]);
+  }, [dyslexiaFont]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const root = document.documentElement;
-      root.setAttribute('data-color-theme', theme);
-      window.localStorage.setItem('theme', theme);
-      // Disable custom color when theme changes
-      setUseCustomColor(false);
+      if (colorblindnessTheme !== 'none') {
+        root.setAttribute('data-color-theme', colorblindnessTheme);
+        window.localStorage.setItem('colorblindnessTheme', colorblindnessTheme);
+      } else {
+        // Remove colorblindness theme, fall back to regular theme
+        root.setAttribute('data-color-theme', theme);
+        window.localStorage.setItem('colorblindnessTheme', 'none');
+      }
     }
-  }, [theme]);
+  }, [colorblindnessTheme, theme]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const root = document.documentElement;
+      if (colorblindnessTheme === 'none') {
+        root.setAttribute('data-color-theme', theme);
+        window.localStorage.setItem('theme', theme);
+        // Disable custom color when theme changes
+        setUseCustomColor(false);
+      }
+    }
+  }, [theme, colorblindnessTheme]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -398,6 +418,14 @@ export default function App() {
   }, [messageDensity]);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const root = document.documentElement;
+      root.setAttribute('data-button-style', buttonStyle);
+      window.localStorage.setItem('buttonStyle', buttonStyle);
+    }
+  }, [buttonStyle]);
+
+  useEffect(() => {
     const updateCogwheelPos = () => {
       if (cogwheelRef.current) {
         const rect = cogwheelRef.current.getBoundingClientRect();
@@ -410,7 +438,7 @@ export default function App() {
     updateCogwheelPos();
     window.addEventListener('resize', updateCogwheelPos);
     return () => window.removeEventListener('resize', updateCogwheelPos);
-  }, []);
+  }, [buttonStyle]);
 
   const addMessage = (role: Role, content: string, msgId?: string) => {
     setMessages((prev) => [
@@ -675,34 +703,34 @@ export default function App() {
         dawContext,
       }, async (event) => {
         if (event.type === 'reply') {
-           setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: event.data.reply } : m));
+          setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: event.data.reply } : m));
 
-           const gm = event.data.generated_music;
-           if (gm?.audio_base64) {
-             const blob = new Blob(
-               [Uint8Array.from(atob(gm.audio_base64), (c) => c.charCodeAt(0))],
-               { type: 'audio/mpeg' },
-             );
-             const url = URL.createObjectURL(blob);
-             setPreviewAudioUrl(url);
-             pendingMusic = { blob, prompt: gm.prompt, durationMs: gm.music_length_ms ?? 15000 };
-           }
+          const gm = event.data.generated_music;
+          if (gm?.audio_base64) {
+            const blob = new Blob(
+              [Uint8Array.from(atob(gm.audio_base64), (c) => c.charCodeAt(0))],
+              { type: 'audio/mpeg' },
+            );
+            const url = URL.createObjectURL(blob);
+            setPreviewAudioUrl(url);
+            pendingMusic = { blob, prompt: gm.prompt, durationMs: gm.music_length_ms ?? 15000 };
+          }
         } else if (event.type === 'trace' || event.type === 'trace_update') {
-           setMessages(prev => prev.map(m => {
-             if (m.id === assistantId) {
-                const traces = [...(m.traces || [])];
-                const existing = traces.findIndex(t => t.id === event.data.id);
-                if (existing >= 0) {
-                  traces[existing] = { ...traces[existing], ...event.data };
-                } else {
-                  traces.push(event.data);
-                }
-                return { ...m, traces };
-             }
-             return m;
-           }));
+          setMessages(prev => prev.map(m => {
+            if (m.id === assistantId) {
+              const traces = [...(m.traces || [])];
+              const existing = traces.findIndex(t => t.id === event.data.id);
+              if (existing >= 0) {
+                traces[existing] = { ...traces[existing], ...event.data };
+              } else {
+                traces.push(event.data);
+              }
+              return { ...m, traces };
+            }
+            return m;
+          }));
         } else if (event.type === 'error') {
-           setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: event.data.error } : m));
+          setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: event.data.error } : m));
         }
       });
 
@@ -1031,7 +1059,7 @@ export default function App() {
             <div className="settings-content">
               <div className="settings-section">
                 <h4>Appearance</h4>
-                <div className="setting-item">
+                <div className="setting-item horizontal">
                   <span className="setting-label">Dark Mode</span>
                   <div
                     className={`toggle-switch${darkMode ? ' active' : ''}`}
@@ -1047,7 +1075,7 @@ export default function App() {
                     }}
                   />
                 </div>
-                <div className="setting-item">
+                <div className="setting-item horizontal">
                   <span className="setting-label">Theme</span>
                   <select
                     value={theme}
@@ -1055,12 +1083,12 @@ export default function App() {
                     className="theme-select"
                     aria-label="Color theme"
                   >
-                    <option value="default">Default</option>
+                    <option value="default">HPU</option>
                     <option value="black-red">Redliner</option>
                     <option value="ivory">Ivory</option>
                   </select>
                 </div>
-                <div className="setting-item">
+                <div className="setting-item horizontal">
                   <span className="setting-label">Custom Color</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <div
@@ -1087,11 +1115,26 @@ export default function App() {
                     />
                   </div>
                 </div>
+                <div className="setting-item">
+                  <span className="setting-label">Button Style</span>
+                  <select
+                    value={buttonStyle}
+                    onChange={(e) => setButtonStyle(e.target.value)}
+                    className="theme-select"
+                    aria-label="Button style"
+                  >
+                    <option value="filled">Filled</option>
+                    <option value="outlined">Outlined</option>
+                    <option value="minimal">Minimal</option>
+                    <option value="ghost">Ghost</option>
+                    <option value="flat">Flat</option>
+                  </select>
+                </div>
               </div>
 
               <div className="settings-section">
                 <h4>Accessibility</h4>
-                <div className="setting-item">
+                <div className="setting-item horizontal">
                   <span className="setting-label">Reduce Motion</span>
                   <div
                     className={`toggle-switch${reduceMotion ? ' active' : ''}`}
@@ -1108,26 +1151,37 @@ export default function App() {
                   />
                 </div>
                 <div className="setting-item">
-                  <span className="setting-label">High Contrast</span>
-                  <div
-                    className={`toggle-switch${highContrast ? ' active' : ''}`}
-                    onClick={() => setHighContrast(!highContrast)}
-                    role="switch"
-                    aria-checked={highContrast}
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setHighContrast(!highContrast);
-                      }
-                    }}
-                  />
+                  <span className="setting-label">Dyslexia-Fonts</span>
+                  <select
+                    value={dyslexiaFont}
+                    onChange={(e) => setDyslexiaFont(e.target.value)}
+                    className="theme-select"
+                    aria-label="Dyslexia-friendly font"
+                  >
+                    <option value="default">Default</option>
+                    <option value="atkinson">Atkinson Hyperlegible</option>
+                    <option value="lexend">Lexend</option>
+                  </select>
+                </div>
+                <div className="setting-item">
+                  <span className="setting-label">Colorblind Themes</span>
+                  <select
+                    value={colorblindnessTheme}
+                    onChange={(e) => setColorblindnessTheme(e.target.value)}
+                    className="theme-select"
+                    aria-label="Colorblindness theme"
+                  >
+                    <option value="none">None</option>
+                    <option value="deuteranopia">Deuteranopia (Green-blind)</option>
+                    <option value="protanopia">Protanopia (Red-blind)</option>
+                    <option value="tritanopia">Tritanopia (Blue-blind)</option>
+                  </select>
                 </div>
               </div>
 
               <div className="settings-section">
                 <h4>User Preferences</h4>
-                <div className="setting-item">
+                <div className="setting-item horizontal">
                   <span className="setting-label">Show Timestamps</span>
                   <div
                     className={`toggle-switch${showTimestamps ? ' active' : ''}`}
@@ -1143,7 +1197,7 @@ export default function App() {
                     }}
                   />
                 </div>
-                <div className="setting-item">
+                <div className="setting-item horizontal">
                   <span className="setting-label">Auto Scroll</span>
                   <div
                     className={`toggle-switch${autoScroll ? ' active' : ''}`}
@@ -1159,7 +1213,7 @@ export default function App() {
                     }}
                   />
                 </div>
-                <div className="setting-item">
+                <div className="setting-item horizontal">
                   <span className="setting-label">Message Spacing</span>
                   <select
                     value={messageDensity}
@@ -1172,7 +1226,7 @@ export default function App() {
                     <option value="spacious">Spacious</option>
                   </select>
                 </div>
-                <div className="setting-item">
+                <div className="setting-item horizontal">
                   <span className="setting-label">Font Size</span>
                   <div className="font-size-controls">
                     <input
@@ -1209,7 +1263,7 @@ export default function App() {
 
               <div className="settings-section">
                 <h4>Developer Settings</h4>
-                <div className="setting-item">
+                <div className="setting-item horizontal">
                   <span className="setting-label">Provider</span>
                   <select
                     value={llmProvider}
