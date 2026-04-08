@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 _backend_dir = os.path.dirname(os.path.abspath(__file__))
@@ -6,9 +7,10 @@ _project_root = os.path.dirname(_backend_dir)
 load_dotenv(os.path.join(_project_root, ".env"))
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import asyncio
 import json
 import logging
@@ -42,6 +44,10 @@ def _get_cors_allow_origins() -> list[str]:
     if raw.strip():
         return [origin.strip() for origin in raw.split(",") if origin.strip()]
     return ["http://127.0.0.1:5173", "http://localhost:5173"]
+
+
+def _get_frontend_dist_dir() -> Path:
+    return Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
 
 async def _ensure_client(request: AgentRequest) -> MCPClient:
@@ -195,6 +201,29 @@ async def run_agent(request: AgentRequest):
         await task
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+_frontend_dist_dir = _get_frontend_dist_dir()
+if _frontend_dist_dir.exists():
+    assets_dir = _frontend_dist_dir / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="frontend-assets")
+
+    @app.get("/", include_in_schema=False)
+    async def serve_frontend_index():
+        return FileResponse(_frontend_dist_dir / "index.html")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_frontend_spa(full_path: str):
+        # Keep API and docs routes owned by FastAPI handlers.
+        if full_path in {"health", "docs", "redoc", "openapi.json"} or full_path.startswith(("agent/", "music/")):
+            raise HTTPException(status_code=404)
+
+        requested_file = _frontend_dist_dir / full_path
+        if requested_file.is_file():
+            return FileResponse(requested_file)
+
+        return FileResponse(_frontend_dist_dir / "index.html")
 
 
 if __name__ == "__main__":
