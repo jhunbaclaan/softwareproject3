@@ -1289,7 +1289,7 @@ export default function App() {
                           ? 'Uses ANTHROPIC_API_KEY if empty'
                           : 'Uses OPENAI_API_KEY if empty'
                     }
-                    className="font-size-input"
+                    className="api-key-input"
                     aria-label="API key for LLM provider"
                     autoComplete="off"
                   />
@@ -1301,7 +1301,7 @@ export default function App() {
                     value={elevenLabsApiKey}
                     onChange={(e) => setElevenLabsApiKey(e.target.value)}
                     placeholder="For agent-generated music; uses ELEVENLABS_API_KEY if empty"
-                    className="font-size-input"
+                    className="api-key-input"
                     aria-label="ElevenLabs API key for music generation in chat"
                     autoComplete="off"
                   />

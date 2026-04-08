@@ -33,6 +33,8 @@ _client_lock = asyncio.Lock()
 
 
 def _get_mcp_server_path() -> str:
+    if url := os.getenv("MCP_SERVER_URL"):
+        return url
     if path := os.getenv("MCP_SERVER_PATH"):
         return path
     backend_dir = os.path.dirname(__file__)

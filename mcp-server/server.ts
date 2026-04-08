@@ -1,7 +1,9 @@
 // required imports
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import { createServer, type IncomingMessage } from "node:http";
 import {
   getLoginStatus,
   createAudiotoolClient,
@@ -1754,5 +1756,76 @@ server.registerTool(
 );
 
 // Start the server
-const transport = new StdioServerTransport();
-await server.connect(transport);
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  if (chunks.length === 0) {
+    return undefined;
+  }
+  const raw = Buffer.concat(chunks).toString("utf8").trim();
+  if (!raw) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+}
+
+const useHttpTransport = (process.env.MCP_TRANSPORT || "").toLowerCase() === "http";
+
+if (useHttpTransport) {
+  const transport = new StreamableHTTPServerTransport({
+    // Stateless mode: one server process and no session map management required.
+    sessionIdGenerator: undefined,
+  });
+  await server.connect(transport);
+
+  const port = Number(process.env.PORT || 3001);
+  const httpServer = createServer(async (req, res) => {
+    try {
+      const method = req.method || "GET";
+      const requestUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+      const pathname = requestUrl.pathname;
+
+      if (method === "GET" && pathname === "/health") {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ status: "ok" }));
+        return;
+      }
+
+      if (pathname !== "/mcp") {
+        res.statusCode = 404;
+        res.end("Not found");
+        return;
+      }
+
+      if (method !== "GET" && method !== "POST" && method !== "DELETE") {
+        res.statusCode = 405;
+        res.end("Method not allowed");
+        return;
+      }
+
+      const parsedBody = method === "POST" ? await readJsonBody(req) : undefined;
+      await transport.handleRequest(req, res, parsedBody);
+    } catch (err) {
+      console.error("[mcp-http] Request error:", err);
+      if (!res.headersSent) {
+        res.statusCode = 500;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ error: "Internal server error" }));
+      }
+    }
+  });
+
+  httpServer.listen(port, () => {
+    console.error(`[mcp-http] Listening on port ${port} at /mcp`);
+  });
+} else {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}

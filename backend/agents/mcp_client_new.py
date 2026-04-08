@@ -5,6 +5,10 @@ from contextlib import AsyncExitStack
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+try:
+    from mcp.client.streamable_http import streamablehttp_client
+except Exception:
+    streamablehttp_client = None
 
 from google import genai
 from google.genai import types
@@ -248,12 +252,30 @@ class MCPClient:
         """Connect to an MCP server
 
         Args:
-            server_script_path: Path to the server script (.py, .js, or .ts)
+            server_script_path: Path to the server script (.py, .js, or .ts), or HTTP(S) MCP URL
         """
+        if server_script_path.startswith(("http://", "https://")):
+            if streamablehttp_client is None:
+                raise RuntimeError(
+                    "Remote MCP transport requested but mcp.client.streamable_http is unavailable."
+                )
+
+            http_transport = await self.exit_stack.enter_async_context(
+                streamablehttp_client(server_script_path)
+            )
+            self.stdio, self.write = http_transport[0], http_transport[1]
+            self.session = await self.exit_stack.enter_async_context(ClientSession(self.stdio, self.write))
+            await self.session.initialize()
+
+            response = await self.session.list_tools()
+            tools = response.tools
+            print("\nConnected to remote MCP server with tools:", [tool.name for tool in tools])
+            return
+
         is_python = server_script_path.endswith('.py')
         is_js = server_script_path.endswith('.js') or server_script_path.endswith('.ts')
         if not (is_python or is_js):
-            raise ValueError("Server script must be a .py, .js, or .ts file")
+            raise ValueError("Server target must be an HTTP(S) URL or a .py/.js/.ts file")
 
         command = "python" if is_python else "node"
         server_params = StdioServerParameters(

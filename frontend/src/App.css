@@ -912,6 +912,11 @@ body {
     border-color: var(--accent);
 }
 
+.api-key-input {
+    width: 100%;
+    min-width: 0;
+}
+
 .reset-btn {
     padding: 6px 10px;
     font-size: 0.79rem;
