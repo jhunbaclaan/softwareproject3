@@ -50,6 +50,10 @@ def _get_frontend_dist_dir() -> Path:
     return Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
 
+def _persist_mcp_client() -> bool:
+    return os.getenv("MCP_CLIENT_PERSIST", "1").strip().lower() not in {"0", "false", "no"}
+
+
 async def _ensure_client(request: AgentRequest) -> MCPClient:
     """Return a ready-to-use MCPClient, reusing it across requests.
 
@@ -66,6 +70,8 @@ async def _ensure_client(request: AgentRequest) -> MCPClient:
 
     async with _client_lock:
         need_new = (
+            not _persist_mcp_client()
+            or
             _client is None
             or _client.session is None
             or project_url != _client_project_url
@@ -199,6 +205,8 @@ async def run_agent(request: AgentRequest):
             yield f"data: {json.dumps(event)}\n\n"
 
         await task
+        if not _persist_mcp_client():
+            await _shutdown_client()
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
