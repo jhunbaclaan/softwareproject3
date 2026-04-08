@@ -6,6 +6,6 @@
     "node": "22.x"
   },
   "scripts": {
-    "heroku-postbuild": "cd mcp-server && npm ci && npm run build && cd ../frontend && npm ci && npm run build"
+    "heroku-postbuild": "cd mcp-server && npm ci --include=dev && npm run build && cd ../frontend && npm ci --include=dev && npm run build"
   }
 }
