@@ -471,7 +471,7 @@ class MCPClient:
         self,
         contents: list,
         config: types.GenerateContentConfig,
-        max_iterations: int = 15,
+        max_iterations: int = 25,
         stream_callback: Optional[Any] = None,
     ) -> tuple[list, str, Optional[Dict[str, Any]]]:
         """Run the Gemini <-> MCP tool-calling loop.
@@ -576,7 +576,7 @@ class MCPClient:
         self,
         messages: list,
         system: str = SYSTEM_INSTRUCTION,
-        max_iterations: int = 15,
+        max_iterations: int = 25,
         stream_callback: Optional[Any] = None,
     ) -> tuple[list, str, Optional[Dict[str, Any]]]:
         """Run the Anthropic Claude <-> MCP tool-calling loop.
@@ -682,7 +682,7 @@ class MCPClient:
         self,
         messages: list[dict],
         system: str = SYSTEM_INSTRUCTION,
-        max_iterations: int = 15,
+        max_iterations: int = 25,
         stream_callback: Optional[Any] = None,
     ) -> tuple[list[dict], str, Optional[Dict[str, Any]]]:
         """Run the OpenAI chat completions <-> MCP tool-calling loop.

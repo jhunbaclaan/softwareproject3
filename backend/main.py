@@ -219,7 +219,7 @@ async def run_agent(request: AgentRequest):
 
         async def keepalive():
             while True:
-                await asyncio.sleep(20)
+                await asyncio.sleep(10)
                 await queue.put({"__keepalive__": True})
 
         global _current_run_task
@@ -233,7 +233,7 @@ async def run_agent(request: AgentRequest):
                 if event is None:
                     break
                 if event.get("__keepalive__"):
-                    yield ": keepalive\n\n"
+                    yield f"data: {json.dumps({'type': 'keepalive'})}\n\n"
                     continue
                 try:
                     yield f"data: {json.dumps(event)}\n\n"
