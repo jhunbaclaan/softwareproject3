@@ -16,3 +16,5 @@ storage/
 /.aiassistant
 /test-results/
 /pyrightconfig.json
+/e2e/playwright-report/
+/e2e/test-results/

@@ -143,6 +143,7 @@ export default function App() {
   const [previewDawError, setPreviewDawError] = useState<string | null>(null);
   const audioImportLayoutRef = useRef(0);
   const [isRunning, setIsRunning] = useState(false);
+  const isRunningRef = useRef(false);
   const authConfig = {
     clientId: envClientId ?? '',
     redirectUrl: envRedirectUrl ?? defaultRedirectUrl,
@@ -659,9 +660,10 @@ export default function App() {
 
   const handleSend = async () => {
     const trimmed = input.trim();
-    if (!trimmed || isRunning) {
+    if (!trimmed || isRunningRef.current) {
       return;
     }
+    isRunningRef.current = true;
 
     if (previewAudioUrl) {
       URL.revokeObjectURL(previewAudioUrl);
@@ -774,6 +776,7 @@ export default function App() {
       const message = error instanceof Error ? error.message : 'Unknown error';
       setMessages(prev => prev.map(m => m.role === 'assistant' && !m.content ? { ...m, content: `Error: ${message}` } : m));
     } finally {
+      isRunningRef.current = false;
       setIsRunning(false);
     }
   };

@@ -471,7 +471,7 @@ class MCPClient:
         self,
         contents: list,
         config: types.GenerateContentConfig,
-        max_iterations: int = 40,
+        max_iterations: int = 25,
         stream_callback: Optional[Any] = None,
     ) -> tuple[list, str, Optional[Dict[str, Any]]]:
         """Run the Gemini <-> MCP tool-calling loop.
@@ -487,9 +487,12 @@ class MCPClient:
         final_text: list[str] = []
         last_tool_result: Optional[str] = None
         music_attachment: Optional[Dict[str, Any]] = None
+        consecutive_failures = 0
+        _MAX_CONSECUTIVE_FAILURES = 3
 
         for _ in range(max_iterations):
             has_function_call = False
+            abort = False
 
             if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
                 candidate = response.candidates[0]
@@ -521,7 +524,13 @@ class MCPClient:
                                 music_attachment = attach
                             if stream_callback:
                                 await stream_callback({"type": "trace_update", "data": {"id": trace_id, "status": "done", "detail": "Completed"}})
+                            consecutive_failures = 0
+                        except asyncio.CancelledError:
+                            if stream_callback and trace_id:
+                                await stream_callback({"type": "trace_update", "data": {"id": trace_id, "status": "error", "detail": "Cancelled"}})
+                            raise
                         except Exception as e:
+                            consecutive_failures += 1
                             result_str = f"Error calling tool {tool_name}: {str(e)}"
                             print(f"[MCP Client] Tool call FAILED: {result_str}")
                             if stream_callback:
@@ -535,6 +544,14 @@ class MCPClient:
                                 response={"result": result_str},
                             )
                         )
+
+                        if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
+                            abort = True
+                            break
+
+                    if abort:
+                        final_text = [f"Aborted: {_MAX_CONSECUTIVE_FAILURES} consecutive tool failures."]
+                        break
 
                     contents.append(candidate.content)
                     contents.append(types.Content(parts=fn_response_parts, role="user"))
@@ -563,7 +580,7 @@ class MCPClient:
         self,
         messages: list,
         system: str = SYSTEM_INSTRUCTION,
-        max_iterations: int = 40,
+        max_iterations: int = 25,
         stream_callback: Optional[Any] = None,
     ) -> tuple[list, str, Optional[Dict[str, Any]]]:
         """Run the Anthropic Claude <-> MCP tool-calling loop.
@@ -580,6 +597,8 @@ class MCPClient:
 
         final_text = ""
         music_attachment: Optional[Dict[str, Any]] = None
+        consecutive_failures = 0
+        _MAX_CONSECUTIVE_FAILURES = 3
         for _ in range(max_iterations):
             response = await self._anthropic_client.messages.create(
                 model=self._anthropic_model,
@@ -613,6 +632,7 @@ class MCPClient:
 
             # Call MCP tools and build tool_result blocks
             tool_results = []
+            abort = False
             for block in tool_use_blocks:
                 tool_name = block.name
                 tool_args = block.input if isinstance(block.input, dict) else {}
@@ -629,7 +649,13 @@ class MCPClient:
                         music_attachment = attach
                     if stream_callback:
                         await stream_callback({"type": "trace_update", "data": {"id": trace_id, "status": "done", "detail": "Completed"}})
+                    consecutive_failures = 0
+                except asyncio.CancelledError:
+                    if stream_callback and trace_id:
+                        await stream_callback({"type": "trace_update", "data": {"id": trace_id, "status": "error", "detail": "Cancelled"}})
+                    raise
                 except Exception as e:
+                    consecutive_failures += 1
                     result_str = f"Error calling tool {tool_name}: {str(e)}"
                     print(f"[MCP Client] Tool call FAILED: {result_str}")
                     if stream_callback:
@@ -641,7 +667,15 @@ class MCPClient:
                     "content": result_str,
                 })
 
+                if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
+                    abort = True
+                    break
+
             messages.append({"role": "user", "content": tool_results})
+
+            if abort:
+                final_text = f"Aborted: {_MAX_CONSECUTIVE_FAILURES} consecutive tool failures."
+                break
 
         if not final_text and messages and isinstance(messages[-1].get("content"), list):
             for c in messages[-1]["content"]:
@@ -656,7 +690,7 @@ class MCPClient:
         self,
         messages: list[dict],
         system: str = SYSTEM_INSTRUCTION,
-        max_iterations: int = 40,
+        max_iterations: int = 25,
         stream_callback: Optional[Any] = None,
     ) -> tuple[list[dict], str, Optional[Dict[str, Any]]]:
         """Run the OpenAI chat completions <-> MCP tool-calling loop.
@@ -677,6 +711,8 @@ class MCPClient:
 
         final_text = ""
         music_attachment: Optional[Dict[str, Any]] = None
+        consecutive_failures = 0
+        _MAX_CONSECUTIVE_FAILURES = 3
         for _ in range(max_iterations):
             response = await self._openai_client.chat.completions.create(
                 model=self._openai_model,
@@ -708,6 +744,7 @@ class MCPClient:
             request_messages.append(assistant_msg)
 
             # Call MCP tools and append tool result messages
+            abort = False
             for tc in msg.tool_calls:
                 tool_name = tc.function.name
                 raw_args = tc.function.arguments or "{}"
@@ -740,7 +777,13 @@ class MCPClient:
                         music_attachment = attach
                     if stream_callback:
                         await stream_callback({"type": "trace_update", "data": {"id": trace_id, "status": "done", "detail": "Completed"}})
+                    consecutive_failures = 0
+                except asyncio.CancelledError:
+                    if stream_callback and trace_id:
+                        await stream_callback({"type": "trace_update", "data": {"id": trace_id, "status": "error", "detail": "Cancelled"}})
+                    raise
                 except Exception as e:
+                    consecutive_failures += 1
                     result_str = f"Error calling tool {tool_name}: {str(e)}"
                     print(f"[MCP Client] Tool call FAILED: {result_str}")
                     if stream_callback:
@@ -751,6 +794,14 @@ class MCPClient:
                     "tool_call_id": tc.id,
                     "content": result_str,
                 })
+
+                if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
+                    abort = True
+                    break
+
+            if abort:
+                final_text = f"Aborted: {_MAX_CONSECUTIVE_FAILURES} consecutive tool failures."
+                break
 
         if not final_text:
             final_text = "No response generated."

@@ -31,3 +31,11 @@ Install steps are in **[README.md](README.md)**.
 ## Secrets and configuration
 
 Do **not** commit secrets. **`.env`** is gitignored; use local env files per team practice. Keep machine-only paths in user/editor settings, not in shared agent rules.
+
+## Deployment
+
+This project is deployed on **DigitalOcean App Platform**.
+
+- When performing deployment-related tasks (checking app status, viewing build/run logs, updating the app spec, or managing the live environment), use the **DigitalOcean MCP** tools available in Claude Code.
+- Prefer MCP tool calls over manual `doctl` CLI commands when the MCP is available in the session.
+- Do **not** commit infrastructure changes (app specs, secrets) without confirming with the user first.

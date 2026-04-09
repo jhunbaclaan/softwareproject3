@@ -30,6 +30,19 @@ _client_project_url: str | None = None
 _client_llm_provider: str = "gemini"
 _client_llm_api_key: str | None = None
 _client_lock = asyncio.Lock()
+_current_run_task: asyncio.Task | None = None
+
+
+async def _cancel_current_run():
+    """Cancel the in-flight agent run task, if any."""
+    global _current_run_task
+    if _current_run_task is not None and not _current_run_task.done():
+        _current_run_task.cancel()
+        try:
+            await _current_run_task
+        except (asyncio.CancelledError, Exception):
+            pass
+    _current_run_task = None
 
 
 def _get_mcp_server_path() -> str:
@@ -162,9 +175,19 @@ def health():
     return {"status": "ok"}
 
 
+@app.post("/agent/cancel")
+async def cancel_agent():
+    """Explicitly cancel the in-flight agent run."""
+    await _cancel_current_run()
+    return {"status": "cancelled"}
+
+
 @app.post("/agent/run")
 async def run_agent(request: AgentRequest):
     """Process a user query and stream events (traces/reply) to the frontend."""
+    if _current_run_task is not None and not _current_run_task.done():
+        raise HTTPException(status_code=409, detail="An agent run is already in progress.")
+
     history = None
     if request.messages:
         history = [{"role": m.role, "content": m.content} for m in request.messages]
@@ -174,7 +197,7 @@ async def run_agent(request: AgentRequest):
         daw_context = request.dawContext.model_dump(exclude_none=True) or None
 
     async def event_generator():
-        queue = asyncio.Queue()
+        queue: asyncio.Queue = asyncio.Queue()
 
         async def stream_callback(event: dict):
             await queue.put(event)
@@ -183,13 +206,18 @@ async def run_agent(request: AgentRequest):
             try:
                 client = await _ensure_client(request)
                 client.set_elevenlabs_api_key(request.elevenlabsApiKey)
-                reply, raw_music = await run_agent_graph(
-                    client, request.prompt, history=history, daw_context=daw_context, stream_callback=stream_callback
+                reply, raw_music = await asyncio.wait_for(
+                    run_agent_graph(
+                        client, request.prompt, history=history, daw_context=daw_context, stream_callback=stream_callback
+                    ),
+                    timeout=300,
                 )
                 generated = (
                     GeneratedMusicAttachment(**raw_music).model_dump() if raw_music else None
                 )
                 await queue.put({"type": "reply", "data": {"reply": reply, "generated_music": generated}})
+            except asyncio.CancelledError:
+                await queue.put({"type": "error", "data": {"error": "Request cancelled."}})
             except Exception as e:
                 await queue.put({"type": "error", "data": {"error": f"Agent error: {str(e)}"}})
             finally:
@@ -197,17 +225,50 @@ async def run_agent(request: AgentRequest):
                 if not _persist_mcp_client() and not _uses_remote_mcp():
                     await _shutdown_client()
 
+        async def keepalive():
+            while True:
+                await asyncio.sleep(10)
+                await queue.put({"__keepalive__": True})
+
+        global _current_run_task
         task = asyncio.create_task(run_task())
+        _current_run_task = task
+        keepalive_task = asyncio.create_task(keepalive())
 
-        while True:
-            event = await queue.get()
-            if event is None:
-                break
-            yield f"data: {json.dumps(event)}\n\n"
+        try:
+            while True:
+                event = await queue.get()
+                if event is None:
+                    break
+                if event.get("__keepalive__"):
+                    yield f"data: {json.dumps({'type': 'keepalive'})}\n\n"
+                    continue
+                try:
+                    yield f"data: {json.dumps(event)}\n\n"
+                except (TypeError, ValueError) as exc:
+                    logger.warning("Skipping non-serializable SSE event (%s): %s", exc, event)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            keepalive_task.cancel()
+            if not task.done():
+                task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+            if _current_run_task is task:
+                _current_run_task = None
 
-        await task
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 _frontend_dist_dir = _get_frontend_dist_dir()

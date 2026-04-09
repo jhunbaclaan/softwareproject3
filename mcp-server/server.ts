@@ -49,6 +49,29 @@ let tokenManager: TokenManager | null = null;
 // auto-layout counter so entities placed without coordinates don't stack
 let autoLayoutOffset = 0;
 
+/**
+ * Properly tear down the current session: stop the synced document (which
+ * closes its WebSocket and lets Node GC the instance), then clear all
+ * global references so a fresh session can be created.
+ *
+ * SyncedDocument.stop() **must** be called before the document is thrown
+ * away — not doing so leaks the sync process and WebSocket connection.
+ */
+async function cleanupCurrentSession(): Promise<void> {
+  if (document) {
+    try {
+      await document.stop();
+      console.error("[cleanup] Previous document stopped");
+    } catch (e) {
+      console.error("[cleanup] Error stopping document:", e);
+    }
+    document = null;
+  }
+  audiotoolClient = null;
+  tokenManager = null;
+  autoLayoutOffset = 0;
+}
+
 // helper for authenticated client
 async function getClient() {
   if (!audiotoolClient) {
@@ -118,6 +141,11 @@ server.registerTool(
   }) => {
     try {
       console.error("[initialize-session] Starting session initialization...");
+
+      // Stop old document / client before creating new ones to avoid
+      // leaking WebSocket connections and sync processes.
+      await cleanupCurrentSession();
+
       const {
         accessToken,
         expiresAt,
@@ -246,6 +274,12 @@ server.registerTool(
     try {
       const { projectURL } = args;
       console.error(`[open-document] Opening document: ${projectURL}`);
+
+      // Stop old document before creating new one
+      if (document) {
+        try { await document.stop(); } catch (e) { console.error("[open-document] Error stopping old document:", e); }
+        document = null;
+      }
 
       const client = await getClient();
 
@@ -1755,6 +1789,24 @@ server.registerTool(
     };
   },
 );
+
+// ---------------------------------------------------------------------------
+// Global error handlers — prevent silent crashes from the nexus SDK or
+// unhandled promise rejections.
+// ---------------------------------------------------------------------------
+process.on("uncaughtException", (err) => {
+  console.error("[FATAL] Uncaught exception:", err);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("[FATAL] Unhandled rejection:", reason);
+});
+
+process.on("SIGTERM", async () => {
+  console.error("[shutdown] SIGTERM received, cleaning up...");
+  await cleanupCurrentSession();
+  process.exit(0);
+});
 
 // Start the server
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
