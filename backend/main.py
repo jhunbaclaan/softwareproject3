@@ -175,10 +175,18 @@ def health():
     return {"status": "ok"}
 
 
+@app.post("/agent/cancel")
+async def cancel_agent():
+    """Explicitly cancel the in-flight agent run."""
+    await _cancel_current_run()
+    return {"status": "cancelled"}
+
+
 @app.post("/agent/run")
 async def run_agent(request: AgentRequest):
     """Process a user query and stream events (traces/reply) to the frontend."""
-    await _cancel_current_run()
+    if _current_run_task is not None and not _current_run_task.done():
+        raise HTTPException(status_code=409, detail="An agent run is already in progress.")
 
     history = None
     if request.messages:

@@ -525,6 +525,10 @@ class MCPClient:
                             if stream_callback:
                                 await stream_callback({"type": "trace_update", "data": {"id": trace_id, "status": "done", "detail": "Completed"}})
                             consecutive_failures = 0
+                        except asyncio.CancelledError:
+                            if stream_callback and trace_id:
+                                await stream_callback({"type": "trace_update", "data": {"id": trace_id, "status": "error", "detail": "Cancelled"}})
+                            raise
                         except Exception as e:
                             consecutive_failures += 1
                             result_str = f"Error calling tool {tool_name}: {str(e)}"
@@ -646,6 +650,10 @@ class MCPClient:
                     if stream_callback:
                         await stream_callback({"type": "trace_update", "data": {"id": trace_id, "status": "done", "detail": "Completed"}})
                     consecutive_failures = 0
+                except asyncio.CancelledError:
+                    if stream_callback and trace_id:
+                        await stream_callback({"type": "trace_update", "data": {"id": trace_id, "status": "error", "detail": "Cancelled"}})
+                    raise
                 except Exception as e:
                     consecutive_failures += 1
                     result_str = f"Error calling tool {tool_name}: {str(e)}"
@@ -770,6 +778,10 @@ class MCPClient:
                     if stream_callback:
                         await stream_callback({"type": "trace_update", "data": {"id": trace_id, "status": "done", "detail": "Completed"}})
                     consecutive_failures = 0
+                except asyncio.CancelledError:
+                    if stream_callback and trace_id:
+                        await stream_callback({"type": "trace_update", "data": {"id": trace_id, "status": "error", "detail": "Cancelled"}})
+                    raise
                 except Exception as e:
                     consecutive_failures += 1
                     result_str = f"Error calling tool {tool_name}: {str(e)}"
