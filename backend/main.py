@@ -77,6 +77,17 @@ def _uses_remote_mcp() -> bool:
     return _is_remote_mcp_target(_get_mcp_server_path())
 
 
+def _is_retryable_mcp_runtime_error(exc: Exception) -> bool:
+    """Best-effort classifier for transient MCP transport/server failures."""
+    message = f"{type(exc).__name__}: {exc}".lower()
+    return (
+        ("httpstatuserror" in message and "500" in message and "/mcp" in message)
+        or ("connecterror" in message)
+        or ("all connection attempts failed" in message)
+        or ("post_writer" in message and "/mcp" in message)
+    )
+
+
 async def _ensure_client(request: AgentRequest) -> MCPClient:
     """Return a ready-to-use MCPClient, reusing it across requests.
 
@@ -255,33 +266,73 @@ async def run_agent(request: AgentRequest):
             await queue.put(event)
 
         async def run_task():
-            client: MCPClient | None = None
+            max_attempts = 2 if _uses_remote_mcp() else 1
+            attempt = 0
+
             try:
-                client = await _ensure_client(request)
-                client.set_elevenlabs_api_key(request.elevenlabsApiKey)
-                reply, raw_music = await asyncio.wait_for(
-                    run_agent_graph(
-                        client, request.prompt, history=history, daw_context=daw_context, stream_callback=stream_callback
-                    ),
-                    timeout=300,
-                )
-                generated = (
-                    GeneratedMusicAttachment(**raw_music).model_dump() if raw_music else None
-                )
-                await queue.put({"type": "reply", "data": {"reply": reply, "generated_music": generated}})
+                while attempt < max_attempts:
+                    attempt += 1
+                    client: MCPClient | None = None
+                    saw_successful_tool = False
+
+                    async def attempt_stream_callback(event: dict):
+                        nonlocal saw_successful_tool
+                        if (
+                            event.get("type") == "trace_update"
+                            and isinstance(event.get("data"), dict)
+                            and event["data"].get("status") == "done"
+                        ):
+                            saw_successful_tool = True
+                        await stream_callback(event)
+
+                    try:
+                        client = await _ensure_client(request)
+                        client.set_elevenlabs_api_key(request.elevenlabsApiKey)
+                        reply, raw_music = await asyncio.wait_for(
+                            run_agent_graph(
+                                client,
+                                request.prompt,
+                                history=history,
+                                daw_context=daw_context,
+                                stream_callback=attempt_stream_callback,
+                            ),
+                            timeout=300,
+                        )
+                        generated = (
+                            GeneratedMusicAttachment(**raw_music).model_dump() if raw_music else None
+                        )
+                        await queue.put({"type": "reply", "data": {"reply": reply, "generated_music": generated}})
+                        return
+                    except Exception as e:
+                        is_retryable = (
+                            _uses_remote_mcp()
+                            and attempt < max_attempts
+                            and _is_retryable_mcp_runtime_error(e)
+                            and not saw_successful_tool
+                        )
+                        if is_retryable:
+                            logger.warning(
+                                "Retrying run after transient MCP error (%s/%s): %s",
+                                attempt,
+                                max_attempts,
+                                e,
+                            )
+                            continue
+                        raise
+                    finally:
+                        if client is not None and _uses_remote_mcp():
+                            try:
+                                await asyncio.wait_for(client.cleanup(), timeout=5.0)
+                            except Exception:
+                                logger.warning("Remote MCP client cleanup failed; proceeding")
+                        elif not _persist_mcp_client():
+                            await _shutdown_client()
             except asyncio.CancelledError:
                 await queue.put({"type": "error", "data": {"error": "Request cancelled."}})
             except Exception as e:
                 await queue.put({"type": "error", "data": {"error": f"Agent error: {str(e)}"}})
             finally:
                 await queue.put(None)
-                if client is not None and _uses_remote_mcp():
-                    try:
-                        await asyncio.wait_for(client.cleanup(), timeout=5.0)
-                    except Exception:
-                        logger.warning("Remote MCP client cleanup failed; proceeding")
-                elif not _persist_mcp_client():
-                    await _shutdown_client()
 
         async def keepalive():
             while True:
