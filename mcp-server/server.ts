@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
-import { createServer, type IncomingMessage } from "node:http";
+import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import {
   getLoginStatus,
@@ -1802,32 +1802,37 @@ process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] Unhandled rejection:", reason);
 });
 
+process.on("warning", (warning) => {
+  console.error("[WARN] Process warning:", warning);
+});
+
+process.on("beforeExit", (code) => {
+  console.error(`[shutdown] beforeExit with code=${code}`);
+});
+
+process.on("exit", (code) => {
+  console.error(`[shutdown] exit with code=${code}`);
+});
+
 process.on("SIGTERM", async () => {
   console.error("[shutdown] SIGTERM received, cleaning up...");
   await cleanupCurrentSession();
   process.exit(0);
 });
 
-// Start the server
-async function readJsonBody(req: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  if (chunks.length === 0) {
-    return undefined;
-  }
-  const raw = Buffer.concat(chunks).toString("utf8").trim();
-  if (!raw) {
-    return undefined;
-  }
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-}
+process.on("SIGINT", async () => {
+  console.error("[shutdown] SIGINT received, cleaning up...");
+  await cleanupCurrentSession();
+  process.exit(0);
+});
 
+process.on("SIGHUP", async () => {
+  console.error("[shutdown] SIGHUP received, cleaning up...");
+  await cleanupCurrentSession();
+  process.exit(0);
+});
+
+// Start the server
 const useHttpTransport = (process.env.MCP_TRANSPORT || "").toLowerCase() === "http";
 
 if (useHttpTransport) {
@@ -1863,8 +1868,8 @@ if (useHttpTransport) {
         return;
       }
 
-      const parsedBody = method === "POST" ? await readJsonBody(req) : undefined;
-      await transport.handleRequest(req, res, parsedBody);
+      // Let the SDK parse MCP request payloads; pre-consuming request body can break initialization/session handshakes.
+      await transport.handleRequest(req, res);
     } catch (err) {
       console.error("[mcp-http] Request error:", err);
       if (!res.headersSent) {
