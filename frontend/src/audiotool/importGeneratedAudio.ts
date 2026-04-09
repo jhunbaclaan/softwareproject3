@@ -72,7 +72,7 @@ async function createSampleWithFallbacks(
           displayName: sampleDisplayName,
           description: 'Imported from Nexus Agent (e.g. ElevenLabs)',
           sampleType: 1,
-          usage: 3,
+          usage: 2,
           tags: ['elevenlabs', 'nexus-agent'],
         },
       },
@@ -83,7 +83,7 @@ async function createSampleWithFallbacks(
         sample: {
           displayName: sampleDisplayName,
           sampleType: 1,
-          usage: 3,
+          usage: 2,
         },
       },
     },

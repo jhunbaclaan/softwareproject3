@@ -165,15 +165,6 @@ def health():
 @app.post("/agent/run")
 async def run_agent(request: AgentRequest):
     """Process a user query and stream events (traces/reply) to the frontend."""
-    try:
-        client = await _ensure_client(request)
-        client.set_elevenlabs_api_key(request.elevenlabsApiKey)
-    except Exception as e:
-        error_msg = str(e)
-        async def error_early():
-            yield f"data: {json.dumps({'type': 'error', 'data': {'error': error_msg}})}\n\n"
-        return StreamingResponse(error_early(), media_type="text/event-stream")
-
     history = None
     if request.messages:
         history = [{"role": m.role, "content": m.content} for m in request.messages]
@@ -190,6 +181,8 @@ async def run_agent(request: AgentRequest):
 
         async def run_task():
             try:
+                client = await _ensure_client(request)
+                client.set_elevenlabs_api_key(request.elevenlabsApiKey)
                 reply, raw_music = await run_agent_graph(
                     client, request.prompt, history=history, daw_context=daw_context, stream_callback=stream_callback
                 )
@@ -201,6 +194,8 @@ async def run_agent(request: AgentRequest):
                 await queue.put({"type": "error", "data": {"error": f"Agent error: {str(e)}"}})
             finally:
                 await queue.put(None)
+                if not _persist_mcp_client() and not _uses_remote_mcp():
+                    await _shutdown_client()
 
         task = asyncio.create_task(run_task())
 
@@ -211,8 +206,6 @@ async def run_agent(request: AgentRequest):
             yield f"data: {json.dumps(event)}\n\n"
 
         await task
-        if not _persist_mcp_client() and not _uses_remote_mcp():
-            await _shutdown_client()
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
