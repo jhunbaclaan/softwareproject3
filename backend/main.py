@@ -30,6 +30,19 @@ _client_project_url: str | None = None
 _client_llm_provider: str = "gemini"
 _client_llm_api_key: str | None = None
 _client_lock = asyncio.Lock()
+_current_run_task: asyncio.Task | None = None
+
+
+async def _cancel_current_run():
+    """Cancel the in-flight agent run task, if any."""
+    global _current_run_task
+    if _current_run_task is not None and not _current_run_task.done():
+        _current_run_task.cancel()
+        try:
+            await _current_run_task
+        except (asyncio.CancelledError, Exception):
+            pass
+    _current_run_task = None
 
 
 def _get_mcp_server_path() -> str:
@@ -165,6 +178,8 @@ def health():
 @app.post("/agent/run")
 async def run_agent(request: AgentRequest):
     """Process a user query and stream events (traces/reply) to the frontend."""
+    await _cancel_current_run()
+
     history = None
     if request.messages:
         history = [{"role": m.role, "content": m.content} for m in request.messages]
@@ -193,6 +208,8 @@ async def run_agent(request: AgentRequest):
                     GeneratedMusicAttachment(**raw_music).model_dump() if raw_music else None
                 )
                 await queue.put({"type": "reply", "data": {"reply": reply, "generated_music": generated}})
+            except asyncio.CancelledError:
+                await queue.put({"type": "error", "data": {"error": "Request cancelled."}})
             except Exception as e:
                 await queue.put({"type": "error", "data": {"error": f"Agent error: {str(e)}"}})
             finally:
@@ -205,7 +222,9 @@ async def run_agent(request: AgentRequest):
                 await asyncio.sleep(20)
                 await queue.put({"__keepalive__": True})
 
+        global _current_run_task
         task = asyncio.create_task(run_task())
+        _current_run_task = task
         keepalive_task = asyncio.create_task(keepalive())
 
         try:
@@ -224,9 +243,24 @@ async def run_agent(request: AgentRequest):
             pass
         finally:
             keepalive_task.cancel()
-            task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
+            if not task.done():
+                task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+            if _current_run_task is task:
+                _current_run_task = None
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 _frontend_dist_dir = _get_frontend_dist_dir()
