@@ -39,8 +39,8 @@ async def _cancel_current_run():
     if _current_run_task is not None and not _current_run_task.done():
         _current_run_task.cancel()
         try:
-            await _current_run_task
-        except (asyncio.CancelledError, Exception):
+            await asyncio.wait_for(_current_run_task, timeout=5.0)
+        except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
             pass
     _current_run_task = None
 
@@ -335,8 +335,11 @@ async def run_agent(request: AgentRequest):
                 await queue.put(None)
 
         async def keepalive():
-            while True:
+            MAX_KEEPALIVE_DURATION = 330  # slightly longer than the 300s task timeout
+            elapsed = 0
+            while elapsed < MAX_KEEPALIVE_DURATION:
                 await asyncio.sleep(10)
+                elapsed += 10
                 await queue.put({"__keepalive__": True})
 
         global _current_run_task
@@ -356,15 +359,17 @@ async def run_agent(request: AgentRequest):
                     yield f"data: {json.dumps(event)}\n\n"
                 except (TypeError, ValueError) as exc:
                     logger.warning("Skipping non-serializable SSE event (%s): %s", exc, event)
-        except asyncio.CancelledError:
-            pass
+        except (asyncio.CancelledError, GeneratorExit, ConnectionError, BrokenPipeError):
+            logger.info("SSE client disconnected")
+        except Exception as exc:
+            logger.warning("Unexpected error in SSE generator: %s", exc)
         finally:
             keepalive_task.cancel()
             if not task.done():
                 task.cancel()
             try:
-                await task
-            except (asyncio.CancelledError, Exception):
+                await asyncio.wait_for(task, timeout=5.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
                 pass
             if _current_run_task is task:
                 _current_run_task = None

@@ -59,7 +59,13 @@ let autoLayoutOffset = 0;
 async function cleanupCurrentSession(): Promise<void> {
   if (document) {
     try {
-      await document.stop();
+      const STOP_TIMEOUT_MS = 3000;
+      await Promise.race([
+        document.stop(),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error("document.stop() timed out")), STOP_TIMEOUT_MS),
+        ),
+      ]);
       console.error("[cleanup] Previous document stopped");
     } catch (e) {
       console.error("[cleanup] Error stopping document:", e);
@@ -1795,10 +1801,12 @@ server.registerTool(
 // ---------------------------------------------------------------------------
 process.on("uncaughtException", (err) => {
   console.error("[FATAL] Uncaught exception:", err);
+  process.exit(1);
 });
 
 process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] Unhandled rejection:", reason);
+  process.exit(1);
 });
 
 process.on("warning", (warning) => {
@@ -1813,23 +1821,48 @@ process.on("exit", (code) => {
   console.error(`[shutdown] exit with code=${code}`);
 });
 
-process.on("SIGTERM", async () => {
-  console.error("[shutdown] SIGTERM received, cleaning up...");
-  await cleanupCurrentSession();
-  process.exit(0);
-});
+// ---------------------------------------------------------------------------
+// Graceful shutdown — single handler for all termination signals with a hard
+// timeout so the process always exits even if cleanup hangs.
+// ---------------------------------------------------------------------------
 
-process.on("SIGINT", async () => {
-  console.error("[shutdown] SIGINT received, cleaning up...");
-  await cleanupCurrentSession();
-  process.exit(0);
-});
+let _httpServer: ReturnType<typeof createServer> | null = null;
+let _isShuttingDown = false;
 
-process.on("SIGHUP", async () => {
-  console.error("[shutdown] SIGHUP received, cleaning up...");
-  await cleanupCurrentSession();
+async function gracefulShutdown(signal: string): Promise<void> {
+  if (_isShuttingDown) return;
+  _isShuttingDown = true;
+  console.error(`[shutdown] ${signal} received, cleaning up...`);
+
+  const SHUTDOWN_TIMEOUT_MS = 5000;
+
+  const cleanup = async () => {
+    try {
+      await cleanupCurrentSession();
+    } catch (e) {
+      console.error("[shutdown] cleanupCurrentSession error:", e);
+    }
+    if (_httpServer) {
+      _httpServer.close();
+    }
+  };
+
+  const timeout = new Promise<void>((resolve) => {
+    setTimeout(() => {
+      console.error("[shutdown] Cleanup timed out, forcing exit");
+      resolve();
+    }, SHUTDOWN_TIMEOUT_MS);
+  });
+
+  await Promise.race([cleanup(), timeout]);
   process.exit(0);
-});
+}
+
+for (const sig of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
+  process.on(sig, () => {
+    gracefulShutdown(sig);
+  });
+}
 
 // Start the server
 const useHttpTransport = (process.env.MCP_TRANSPORT || "").toLowerCase() === "http";
@@ -1839,10 +1872,15 @@ if (useHttpTransport) {
     // Stateless mode avoids session-id mismatch issues across transport reconnects.
     sessionIdGenerator: undefined,
   });
-  await server.connect(transport);
+  try {
+    await server.connect(transport);
+  } catch (err) {
+    console.error("[mcp-http] Failed to connect transport:", err);
+    process.exit(1);
+  }
 
   const port = Number(process.env.PORT || 3001);
-  const httpServer = createServer(async (req, res) => {
+  _httpServer = createServer(async (req, res) => {
     try {
       const method = req.method || "GET";
       const requestUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
@@ -1931,10 +1969,16 @@ if (useHttpTransport) {
         );
       });
 
+      // Diagnostic: log memory + uptime on every MCP request so we can correlate 500s with resource pressure.
+      const mem = process.memoryUsage();
+      console.error(
+        `[mcp-diag] ${method} ${pathname} heap=${Math.round(mem.heapUsed / 1024 / 1024)}MB rss=${Math.round(mem.rss / 1024 / 1024)}MB uptime=${Math.round(process.uptime())}s`,
+      );
+
       // Let the SDK parse MCP request payloads; pre-consuming request body can break initialization/session handshakes.
       await transport.handleRequest(req, res);
     } catch (err) {
-      console.error("[mcp-http] Request error:", err);
+      console.error("[mcp-http] Request error:", err instanceof Error ? err.stack : err);
       if (!res.headersSent) {
         res.statusCode = 500;
         res.setHeader("content-type", "application/json");
@@ -1943,7 +1987,12 @@ if (useHttpTransport) {
     }
   });
 
-  httpServer.listen(port, () => {
+  _httpServer.on("error", (err) => {
+    console.error("[mcp-http] Server error:", err);
+    process.exit(1);
+  });
+
+  _httpServer.listen(port, () => {
     console.error(`[mcp-http] Listening on port ${port} at /mcp`);
   });
 } else {
