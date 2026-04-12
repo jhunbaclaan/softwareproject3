@@ -7,7 +7,7 @@ import {
   type SyncedDocument,
 } from '@audiotool/nexus';
 import './App.css';
-import { getApiBaseUrl, runAgentStream, type AuthTokens, type ConversationMessage, type LLMProvider, type TraceItem, type DawContext } from './api';
+import { cancelAgentRun, getApiBaseUrl, runAgentStream, type AuthTokens, type ConversationMessage, type LLMProvider, type TraceItem, type DawContext } from './api';
 import { importAudioBlobToProject } from './audiotool/importGeneratedAudio';
 
 type Role = 'user' | 'assistant';
@@ -144,6 +144,7 @@ export default function App() {
   const audioImportLayoutRef = useRef(0);
   const [isRunning, setIsRunning] = useState(false);
   const isRunningRef = useRef(false);
+  const streamAbortRef = useRef<AbortController | null>(null);
   const authConfig = {
     clientId: envClientId ?? '',
     redirectUrl: envRedirectUrl ?? defaultRedirectUrl,
@@ -658,12 +659,26 @@ export default function App() {
     void fetchLoginStatus();
   }, [envClientId]);
 
+  useEffect(() => {
+    return () => {
+      streamAbortRef.current?.abort();
+      void cancelAgentRun(getApiBaseUrl());
+    };
+  }, []);
+
+  const handleStopAgent = () => {
+    void cancelAgentRun(getApiBaseUrl());
+    streamAbortRef.current?.abort();
+  };
+
   const handleSend = async () => {
     const trimmed = input.trim();
     if (!trimmed || isRunningRef.current) {
       return;
     }
     isRunningRef.current = true;
+    const streamController = new AbortController();
+    streamAbortRef.current = streamController;
 
     if (previewAudioUrl) {
       URL.revokeObjectURL(previewAudioUrl);
@@ -676,6 +691,7 @@ export default function App() {
     addMessage('user', trimmed);
     setInput('');
 
+    let assistantIdForRun: string | undefined;
     try {
       const authTokens = authStatus?.loggedIn
         ? extractAuthTokens(
@@ -698,8 +714,8 @@ export default function App() {
 
       const dawContext = getDawContext(syncedDocument);
 
-      const assistantId = createId();
-      addMessage('assistant', '', assistantId);
+      assistantIdForRun = createId();
+      addMessage('assistant', '', assistantIdForRun);
 
       let pendingMusic: { blob: Blob; prompt: string; durationMs: number } | null = null;
 
@@ -716,7 +732,7 @@ export default function App() {
         dawContext,
       }, async (event) => {
         if (event.type === 'reply') {
-          setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: event.data.reply } : m));
+          setMessages(prev => prev.map(m => m.id === assistantIdForRun ? { ...m, content: event.data.reply } : m));
 
           const gm = event.data.generated_music;
           if (gm?.audio_base64) {
@@ -730,7 +746,7 @@ export default function App() {
           }
         } else if (event.type === 'trace' || event.type === 'trace_update') {
           setMessages(prev => prev.map(m => {
-            if (m.id === assistantId) {
+            if (m.id === assistantIdForRun) {
               const traces = [...(m.traces || [])];
               const existing = traces.findIndex(t => t.id === event.data.id);
               if (existing >= 0) {
@@ -743,9 +759,9 @@ export default function App() {
             return m;
           }));
         } else if (event.type === 'error') {
-          setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: event.data.error } : m));
+          setMessages(prev => prev.map(m => m.id === assistantIdForRun ? { ...m, content: event.data.error } : m));
         }
-      });
+      }, { signal: streamController.signal });
 
       if (pendingMusic) {
         const { blob, prompt, durationMs } = pendingMusic;
@@ -773,9 +789,27 @@ export default function App() {
         }
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      setMessages(prev => prev.map(m => m.role === 'assistant' && !m.content ? { ...m, content: `Error: ${message}` } : m));
+      const isAbort =
+        (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError') ||
+        (error instanceof Error && error.name === 'AbortError');
+      if (isAbort && assistantIdForRun) {
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantIdForRun && !m.content
+              ? { ...m, content: 'Stopped.' }
+              : m,
+          ),
+        );
+      } else if (!isAbort) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        setMessages(prev =>
+          prev.map(m =>
+            m.role === 'assistant' && !m.content ? { ...m, content: `Error: ${message}` } : m,
+          ),
+        );
+      }
     } finally {
+      streamAbortRef.current = null;
       isRunningRef.current = false;
       setIsRunning(false);
     }
@@ -1045,6 +1079,14 @@ export default function App() {
               />
               <button type="submit" disabled={!input.trim() || isRunning}>
                 {isRunning ? 'Sending...' : 'Send'}
+              </button>
+              <button
+                type="button"
+                className="ghost"
+                disabled={!isRunning}
+                onClick={handleStopAgent}
+              >
+                Stop
               </button>
             </form>
           </main>

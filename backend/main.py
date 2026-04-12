@@ -7,7 +7,7 @@ _project_root = os.path.dirname(_backend_dir)
 load_dotenv(os.path.join(_project_root, ".env"))
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -246,7 +246,7 @@ async def cancel_agent():
 
 
 @app.post("/agent/run")
-async def run_agent(request: AgentRequest):
+async def run_agent(request: AgentRequest, http_request: Request):
     """Process a user query and stream events (traces/reply) to the frontend."""
     if _current_run_task is not None and not _current_run_task.done():
         raise HTTPException(status_code=409, detail="An agent run is already in progress.")
@@ -339,10 +339,38 @@ async def run_agent(request: AgentRequest):
                 await asyncio.sleep(10)
                 await queue.put({"__keepalive__": True})
 
+        async def watch_client_disconnect(
+            run_task: asyncio.Task,
+            keepalive: asyncio.Task,
+        ) -> None:
+            """If the client closes the SSE connection, cancel the agent run (avoids orphaned work)."""
+            try:
+                while True:
+                    await asyncio.sleep(1.5)
+                    try:
+                        if await http_request.is_disconnected():
+                            logger.info("SSE client disconnected; cancelling agent run")
+                            break
+                    except Exception:
+                        logger.info("SSE disconnect watcher exiting (request channel closed)")
+                        break
+            except asyncio.CancelledError:
+                return
+
+            if not keepalive.done():
+                keepalive.cancel()
+            if not run_task.done():
+                run_task.cancel()
+            try:
+                queue.put_nowait(None)
+            except Exception:
+                pass
+
         global _current_run_task
         task = asyncio.create_task(run_task())
         _current_run_task = task
         keepalive_task = asyncio.create_task(keepalive())
+        disconnect_task = asyncio.create_task(watch_client_disconnect(task, keepalive_task))
 
         try:
             while True:
@@ -359,6 +387,11 @@ async def run_agent(request: AgentRequest):
         except asyncio.CancelledError:
             pass
         finally:
+            disconnect_task.cancel()
+            try:
+                await disconnect_task
+            except (asyncio.CancelledError, Exception):
+                pass
             keepalive_task.cancel()
             if not task.done():
                 task.cancel()

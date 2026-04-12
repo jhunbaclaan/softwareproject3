@@ -29,10 +29,14 @@ vi.mock('@audiotool/nexus', () => ({
 }));
 
 vi.mock('../api', () => ({
+  getApiBaseUrl: vi.fn(() => 'http://127.0.0.1:8000'),
   runAgent: vi.fn().mockResolvedValue({ reply: 'Hello from the agent!' }),
-  runAgentStream: vi.fn().mockImplementation(async (_baseUrl: string, _payload: any, onEvent: (e: any) => void) => {
-    onEvent({ type: 'reply', data: { reply: 'Hello from the agent!' } });
-  }),
+  cancelAgentRun: vi.fn().mockResolvedValue(undefined),
+  runAgentStream: vi.fn().mockImplementation(
+    async (_baseUrl: string, _payload: any, onEvent: (e: any) => void, _opts?: unknown) => {
+      onEvent({ type: 'reply', data: { reply: 'Hello from the agent!' } });
+    },
+  ),
 }));
 
 vi.mock('../audiotool/importGeneratedAudio', () => ({
@@ -68,11 +72,11 @@ const setupLoggedOut = async () => {
   return status;
 };
 
-/** Click the "Skip Tutorial" button to dismiss the tutorial overlay. */
+/** Click the tutorial "Skip" button to dismiss the overlay. */
 const dismissTutorial = () => {
-  const skipButtons = screen.getAllByText('Skip Tutorial');
-  if (skipButtons.length > 0) {
-    fireEvent.click(skipButtons[0]);
+  const skip = screen.queryByRole('button', { name: 'Skip' });
+  if (skip) {
+    fireEvent.click(skip);
   }
 };
 
@@ -446,7 +450,11 @@ describe('App component', () => {
       // Tutorial step 1 title might conflict with sidebar heading, use getAllByText
       const consoleElements = screen.getAllByText('Console');
       expect(consoleElements.length).toBeGreaterThanOrEqual(1);
-      expect(screen.getByText('This is the console where you can log in and manage your projects.')).toBeTruthy();
+      expect(
+        screen.getByText(
+          /This is the console where you can log in and manage your projects\. Click/,
+        ),
+      ).toBeTruthy();
     });
 
     it('advances to the next tutorial step when Next is clicked', () => {
@@ -454,18 +462,24 @@ describe('App component', () => {
       fireEvent.click(screen.getByText('Next'));
 
       expect(screen.getByText('Chat Box')).toBeTruthy();
-      expect(screen.getByText('This is the chat box where you can talk to the agent, paste ABC notation, or ask for music.')).toBeTruthy();
+      expect(
+        screen.getByText(
+          /This is the chat box where you can talk to the agent, paste ABC notation, generate music/,
+        ),
+      ).toBeTruthy();
     });
 
-    it('dismisses the tutorial when Skip Tutorial is clicked', () => {
+    it('dismisses the tutorial when Skip is clicked', () => {
       render(<App />);
       dismissTutorial();
 
       // Tutorial text should be gone
       expect(
-        screen.queryByText('This is the console where you can log in and manage your projects.')
+        screen.queryByText(
+          /This is the console where you can log in and manage your projects\. Click/,
+        ),
       ).toBeNull();
-      expect(localStorage.getItem('tutorialCompleted')).toBe('true');
+      expect(localStorage.getItem('tutorial.seen')).toBe('true');
     });
 
     it('shows Finish on the last tutorial step and dismisses on click', () => {
@@ -478,9 +492,11 @@ describe('App component', () => {
 
       fireEvent.click(screen.getByText('Finish'));
       expect(
-        screen.queryByText('This is the settings cogwheel to customize your experience.')
+        screen.queryByText(
+          /Open the Settings Menu to customize your experience and input your API keys\./,
+        ),
       ).toBeNull();
-      expect(localStorage.getItem('tutorialCompleted')).toBe('true');
+      expect(localStorage.getItem('tutorial.seen')).toBe('true');
     });
   });
 
@@ -555,23 +571,20 @@ describe('App component', () => {
       expect(localStorage.getItem('reduceMotion')).toBe('true');
     });
 
-    it('toggles high contrast attribute on document', async () => {
+    it('applies colorblind theme to document when selected', async () => {
       render(<App />);
       dismissTutorial();
       openSettings();
 
-      const toggle = screen.getByText('High Contrast')
-        .closest('.setting-item')!
-        .querySelector('[role="switch"]')!;
-
+      const colorblindSelect = screen.getByLabelText('Colorblindness theme');
       await act(async () => {
-        fireEvent.click(toggle);
+        fireEvent.change(colorblindSelect, { target: { value: 'deuteranopia' } });
       });
 
       await waitFor(() => {
-        expect(document.documentElement.getAttribute('data-high-contrast')).toBe('true');
+        expect(document.documentElement.getAttribute('data-color-theme')).toBe('deuteranopia');
       });
-      expect(localStorage.getItem('highContrast')).toBe('true');
+      expect(localStorage.getItem('colorblindnessTheme')).toBe('deuteranopia');
     });
 
     it('toggles auto scroll and persists to localStorage', async () => {

@@ -101,10 +101,19 @@ export async function runAgent(baseUrl: string, payload: AgentRequest): Promise<
   return res.json();
 }
 
+export type RunAgentStreamOptions = {
+  signal?: AbortSignal;
+};
+
+export async function cancelAgentRun(baseUrl: string): Promise<void> {
+  await fetch(`${baseUrl}/agent/cancel`, { method: 'POST' });
+}
+
 export async function runAgentStream(
   baseUrl: string,
   payload: AgentRequest,
   onEvent: (event: any) => void | Promise<void>,
+  options?: RunAgentStreamOptions,
 ): Promise<void> {
   const res = await fetch(`${baseUrl}/agent/run`, {
     method: 'POST',
@@ -112,6 +121,7 @@ export async function runAgentStream(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
+    signal: options?.signal,
   });
 
   if (!res.ok) {
