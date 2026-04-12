@@ -100,6 +100,21 @@ async def test_tool_schema_conversion_anthropic():
 
 
 @pytest.mark.asyncio
+async def test_dispatch_tool_raises_when_mcp_returns_is_error():
+    """MCP tool-level errors should count as failures in loop logic."""
+    client = MCPClient(llm_provider="gemini")
+    client.session = AsyncMock()
+
+    mock_result = MagicMock()
+    mock_result.isError = True
+    mock_result.content = [MagicMock(text="validation failed")]
+    client.session.call_tool = AsyncMock(return_value=mock_result)
+
+    with pytest.raises(RuntimeError, match="validation failed"):
+        await client._dispatch_tool("connect-entities", {"connections": []})
+
+
+@pytest.mark.asyncio
 async def test_tool_loop_max_iterations():
     """Test that tool loop stops after max iterations."""
     client = MCPClient(llm_provider="gemini")

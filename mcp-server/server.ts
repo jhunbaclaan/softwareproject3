@@ -5,6 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { z } from "zod";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
+import { getHeapStatistics } from "node:v8";
 import {
   getLoginStatus,
   createAudiotoolClient,
@@ -44,6 +45,7 @@ interface ActiveSession {
   id: string;
   server: McpServer;
   transport: StreamableHTTPServerTransport;
+  lastActivityAtMs: number;
 }
 
 let activeSession: ActiveSession | null = null;
@@ -68,18 +70,129 @@ let tokenManager: TokenManager | null = null;
 // auto-layout counter so entities placed without coordinates don't stack
 let autoLayoutOffset = 0;
 
+interface TerminableLike {
+  terminate: () => void;
+}
+
+interface DocumentEventCounters {
+  created: number;
+  removed: number;
+  createdByType: Map<string, number>;
+  removedByType: Map<string, number>;
+  startedAtMs: number;
+}
+
+let documentEventCounters: DocumentEventCounters | null = null;
+let documentEventSubscriptions: TerminableLike[] = [];
+let memoryHeartbeatInterval: NodeJS.Timeout | null = null;
+let sessionIdleTimer: NodeJS.Timeout | null = null;
+let lastDeepMemDiagAtMs = 0;
+
 const MB = 1024 * 1024;
 
 function toMb(bytes: number): number {
   return Math.round(bytes / MB);
 }
 
+function getDocumentConnectedState(): boolean | null {
+  if (!document) return null;
+  try {
+    return document.connected.getValue();
+  } catch {
+    return null;
+  }
+}
+
+function summarizeTopCounters(
+  counters: Map<string, number>,
+  limit = 4,
+): string {
+  const entries = [...counters.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit);
+  if (entries.length === 0) return "none";
+  return entries.map(([type, count]) => `${type}:${count}`).join(",");
+}
+
+function summarizeActiveResources(limit = 8): string {
+  const getResourcesInfo = (
+    process as unknown as { getActiveResourcesInfo?: () => string[] }
+  ).getActiveResourcesInfo;
+  if (typeof getResourcesInfo !== "function") return "unavailable";
+  const resources = getResourcesInfo();
+  if (!resources.length) return "none";
+
+  const counts = new Map<string, number>();
+  for (const resource of resources) {
+    counts.set(resource, (counts.get(resource) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([name, count]) => `${name}:${count}`)
+    .join(",");
+}
+
+function terminateDocumentEventDiagnostics(): void {
+  for (const subscription of documentEventSubscriptions) {
+    try {
+      subscription.terminate();
+    } catch (e) {
+      console.error("[mcp-mem] Error terminating document diagnostic subscription:", e);
+    }
+  }
+  documentEventSubscriptions = [];
+  documentEventCounters = null;
+}
+
+function setupDocumentEventDiagnostics(doc: SyncedDocument): void {
+  terminateDocumentEventDiagnostics();
+  documentEventCounters = {
+    created: 0,
+    removed: 0,
+    createdByType: new Map<string, number>(),
+    removedByType: new Map<string, number>(),
+    startedAtMs: Date.now(),
+  };
+
+  const createSubscription = doc.events.onCreate("*", (entity) => {
+    if (!documentEventCounters) return;
+    documentEventCounters.created += 1;
+    const entityType = (entity as { type?: string }).type || "unknown";
+    documentEventCounters.createdByType.set(
+      entityType,
+      (documentEventCounters.createdByType.get(entityType) || 0) + 1,
+    );
+  });
+
+  const removeSubscription = doc.events.onRemove("*", (entity) => {
+    if (!documentEventCounters) return;
+    documentEventCounters.removed += 1;
+    const entityType = (entity as { type?: string }).type || "unknown";
+    documentEventCounters.removedByType.set(
+      entityType,
+      (documentEventCounters.removedByType.get(entityType) || 0) + 1,
+    );
+  });
+
+  const connectedSubscription = doc.connected.subscribe((isConnected) => {
+    logMemoryDiag("document-connected-change", {
+      connected: isConnected,
+      docCreates: documentEventCounters?.created ?? 0,
+      docRemoves: documentEventCounters?.removed ?? 0,
+    });
+  }, false);
+
+  documentEventSubscriptions.push(createSubscription, removeSubscription, connectedSubscription);
+  console.error("[mcp-mem] Document event diagnostics enabled");
+}
+
 function memoryDiagString(): string {
   const mem = process.memoryUsage();
+  const heapStats = getHeapStatistics();
   return [
     `rss=${toMb(mem.rss)}MB`,
     `heapUsed=${toMb(mem.heapUsed)}MB`,
     `heapTotal=${toMb(mem.heapTotal)}MB`,
+    `heapLimit=${toMb(heapStats.heap_size_limit)}MB`,
     `external=${toMb(mem.external)}MB`,
     `arrayBuffers=${toMb(mem.arrayBuffers)}MB`,
     `uptime=${Math.round(process.uptime())}s`,
@@ -98,6 +211,103 @@ function logMemoryDiag(
   console.error(`[mcp-mem] ${label} ${memoryDiagString()}${suffix}`);
 }
 
+function logDeepMemoryDiag(
+  label: string,
+  extra: Record<string, string | number | boolean | null | undefined> = {},
+): void {
+  const heapStats = getHeapStatistics();
+  const resources = process.resourceUsage();
+  const sessionUptimeSeconds = documentEventCounters
+    ? Math.round((Date.now() - documentEventCounters.startedAtMs) / 1000)
+    : null;
+
+  logMemoryDiag(label, {
+    ...extra,
+    activeSession: activeSession?.id || "none",
+    hasDocument: Boolean(document),
+    connected: getDocumentConnectedState(),
+    activeResources: summarizeActiveResources(),
+    docCreates: documentEventCounters?.created ?? 0,
+    docRemoves: documentEventCounters?.removed ?? 0,
+    docCreateTop: documentEventCounters
+      ? summarizeTopCounters(documentEventCounters.createdByType)
+      : "none",
+    docRemoveTop: documentEventCounters
+      ? summarizeTopCounters(documentEventCounters.removedByType)
+      : "none",
+    docSessionAgeSec: sessionUptimeSeconds,
+    maxRssKb: resources.maxRSS,
+    userCpuUs: resources.userCPUTime,
+    systemCpuUs: resources.systemCPUTime,
+    totalHeapMb: toMb(heapStats.total_heap_size),
+    totalPhysMb: toMb(heapStats.total_physical_size),
+    availHeapMb: toMb(heapStats.total_available_size),
+  });
+}
+
+function ensureMemoryHeartbeat(): void {
+  if (memoryHeartbeatInterval) return;
+
+  const intervalMsRaw = Number(process.env.MCP_MEM_HEARTBEAT_MS || 15000);
+  const intervalMs = Number.isFinite(intervalMsRaw)
+    ? Math.max(1000, intervalMsRaw)
+    : 15000;
+  const deepThresholdRaw = Number(process.env.MCP_MEM_DEEP_THRESHOLD_MB || 1200);
+  const deepThresholdMb = Number.isFinite(deepThresholdRaw)
+    ? Math.max(0, deepThresholdRaw)
+    : 1200;
+  const deepCooldownRaw = Number(process.env.MCP_MEM_DEEP_COOLDOWN_MS || 60000);
+  const deepCooldownMs = Number.isFinite(deepCooldownRaw)
+    ? Math.max(10000, deepCooldownRaw)
+    : 60000;
+
+  memoryHeartbeatInterval = setInterval(() => {
+    const rssMb = toMb(process.memoryUsage().rss);
+    logMemoryDiag("heartbeat", {
+      activeSession: activeSession?.id || "none",
+      hasDocument: Boolean(document),
+      connected: getDocumentConnectedState(),
+      activeResources: summarizeActiveResources(),
+      docCreates: documentEventCounters?.created ?? 0,
+      docRemoves: documentEventCounters?.removed ?? 0,
+      docCreateTop: documentEventCounters
+        ? summarizeTopCounters(documentEventCounters.createdByType, 3)
+        : "none",
+      docRemoveTop: documentEventCounters
+        ? summarizeTopCounters(documentEventCounters.removedByType, 3)
+        : "none",
+    });
+
+    if (deepThresholdMb > 0 && rssMb >= deepThresholdMb) {
+      const now = Date.now();
+      if (now - lastDeepMemDiagAtMs >= deepCooldownMs) {
+        lastDeepMemDiagAtMs = now;
+        logDeepMemoryDiag("heartbeat-threshold", {
+          rssMb,
+          thresholdMb: deepThresholdMb,
+        });
+      }
+    }
+  }, intervalMs);
+
+  memoryHeartbeatInterval.unref?.();
+  console.error(
+    `[mcp-mem] Heartbeat enabled intervalMs=${intervalMs} deepThresholdMb=${deepThresholdMb} deepCooldownMs=${deepCooldownMs}`,
+  );
+}
+
+function stopMemoryHeartbeat(): void {
+  if (!memoryHeartbeatInterval) return;
+  clearInterval(memoryHeartbeatInterval);
+  memoryHeartbeatInterval = null;
+}
+
+function clearSessionIdleTimer(): void {
+  if (!sessionIdleTimer) return;
+  clearTimeout(sessionIdleTimer);
+  sessionIdleTimer = null;
+}
+
 /**
  * Properly tear down the current session: stop the synced document (which
  * closes its WebSocket and lets Node GC the instance), then clear all
@@ -111,20 +321,31 @@ async function cleanupCurrentSession(): Promise<void> {
     hasDocument: Boolean(document),
     hasClient: Boolean(audiotoolClient),
     hasTokenManager: Boolean(tokenManager),
+    hasDocumentDiagnostics: Boolean(documentEventCounters),
   });
+  terminateDocumentEventDiagnostics();
+  let documentStopTimedOut = false;
   if (document) {
+    const stopTimeoutMsRaw = Number(process.env.MCP_DOCUMENT_STOP_TIMEOUT_MS || 3000);
+    const stopTimeoutMs = Number.isFinite(stopTimeoutMsRaw)
+      ? Math.max(500, stopTimeoutMsRaw)
+      : 3000;
     try {
-      const STOP_TIMEOUT_MS = 3000;
       await Promise.race([
         document.stop(),
         new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error("document.stop() timed out")), STOP_TIMEOUT_MS),
+          setTimeout(() => reject(new Error("document.stop() timed out")), stopTimeoutMs),
         ),
       ]);
       console.error("[cleanup] Previous document stopped");
       logMemoryDiag("cleanup-after-stop");
     } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      documentStopTimedOut = errorMsg.includes("document.stop() timed out");
       console.error("[cleanup] Error stopping document:", e);
+      if (documentStopTimedOut) {
+        logDeepMemoryDiag("cleanup-document-stop-timeout", { stopTimeoutMs });
+      }
     }
     document = null;
   }
@@ -132,6 +353,25 @@ async function cleanupCurrentSession(): Promise<void> {
   tokenManager = null;
   autoLayoutOffset = 0;
   logMemoryDiag("cleanup-complete");
+
+  if (documentStopTimedOut) {
+    const failFastOnTimeout =
+      (process.env.MCP_FAIL_FAST_ON_STOP_TIMEOUT || "0").trim().toLowerCase() === "1";
+    if (failFastOnTimeout) {
+      const exitCodeRaw = Number(process.env.MCP_FAIL_FAST_EXIT_CODE || 86);
+      const exitCode = Number.isFinite(exitCodeRaw)
+        ? Math.max(1, Math.floor(exitCodeRaw))
+        : 86;
+      console.error(
+        `[cleanup] document.stop() timed out; fail-fast enabled, exiting process with code ${exitCode}`,
+      );
+      setTimeout(() => process.exit(exitCode), 0);
+    } else {
+      console.error(
+        "[cleanup] document.stop() timed out; fail-fast disabled (set MCP_FAIL_FAST_ON_STOP_TIMEOUT=1 to auto-restart)",
+      );
+    }
+  }
 }
 
 // helper for authenticated client
@@ -268,6 +508,7 @@ srv.registerTool(
       document = await audiotoolClient.createSyncedDocument({
         project: projectUrl,
       });
+      setupDocumentEventDiagnostics(document);
       console.error("[initialize-session] Document created, starting sync...");
       logMemoryDiag("initialize-after-document-created");
 
@@ -353,11 +594,8 @@ srv.registerTool(
       const { projectURL } = args;
       console.error(`[open-document] Opening document: ${projectURL}`);
 
-      // Stop old document before creating new one
-      if (document) {
-        try { await document.stop(); } catch (e) { console.error("[open-document] Error stopping old document:", e); }
-        document = null;
-      }
+      // Reuse the same robust cleanup path as initialize-session.
+      await cleanupCurrentSession();
 
       const client = await getClient();
 
@@ -1729,6 +1967,29 @@ srv.registerTool(
       const noteRegions = allEntities.filter((e) => e.entityType === "noteRegion");
       const noteCollections = allEntities.filter((e) => e.entityType === "noteCollection");
       const noteEntities = allEntities.filter((e) => e.entityType === "note");
+      const notesByCollectionRef = new Map<string, typeof allEntities>();
+      const notesByRegionRef = new Map<string, typeof allEntities>();
+      for (const noteEntity of noteEntities) {
+        const nf = noteEntity.fields as any;
+        const collectionRef = refId(nf.collection) ?? refId(nf.noteCollection);
+        const regionRef = refId(nf.region) ?? refId(nf.noteRegion);
+        if (collectionRef) {
+          const existing = notesByCollectionRef.get(collectionRef);
+          if (existing) {
+            existing.push(noteEntity);
+          } else {
+            notesByCollectionRef.set(collectionRef, [noteEntity]);
+          }
+        }
+        if (regionRef) {
+          const existing = notesByRegionRef.get(regionRef);
+          if (existing) {
+            existing.push(noteEntity);
+          } else {
+            notesByRegionRef.set(regionRef, [noteEntity]);
+          }
+        }
+      }
       console.error(
         `[export-tracks-abc] Entity counts: noteRegions=${noteRegions.length} noteCollections=${noteCollections.length} notes=${noteEntities.length}`,
       );
@@ -1776,11 +2037,7 @@ srv.registerTool(
           if (collectionRef) {
             const collection = noteCollections.find((c) => c.id === collectionRef);
             if (collection) {
-              regionNotes = noteEntities.filter((n) => {
-                const nf = n.fields as any;
-                const colRef = refId(nf.collection) ?? refId(nf.noteCollection);
-                return colRef === collection.id;
-              });
+              regionNotes = notesByCollectionRef.get(collection.id) ?? [];
             }
             console.error(
               `[export-tracks-abc]     via collection: found ${regionNotes.length} notes`,
@@ -1788,11 +2045,7 @@ srv.registerTool(
           }
           // Fallback: notes referencing this region directly
           if (regionNotes.length === 0) {
-            regionNotes = noteEntities.filter((n) => {
-              const nf = n.fields as any;
-              const regRef = refId(nf.region) ?? refId(nf.noteRegion);
-              return regRef === region.id;
-            });
+            regionNotes = notesByRegionRef.get(region.id) ?? [];
             if (regionNotes.length > 0) {
               console.error(
                 `[export-tracks-abc]     via region fallback: found ${regionNotes.length} notes`,
@@ -1915,6 +2168,8 @@ async function gracefulShutdown(signal: string): Promise<void> {
   const SHUTDOWN_TIMEOUT_MS = 5000;
 
   const cleanup = async () => {
+    stopMemoryHeartbeat();
+    clearSessionIdleTimer();
     try {
       await cleanupCurrentSession();
     } catch (e) {
@@ -1952,6 +2207,7 @@ for (const sig of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
 
 // Start the server
 const useHttpTransport = (process.env.MCP_TRANSPORT || "").toLowerCase() === "http";
+ensureMemoryHeartbeat();
 
 if (useHttpTransport) {
   // -----------------------------------------------------------------------
@@ -1965,17 +2221,73 @@ if (useHttpTransport) {
   // at most one active session and tear down the old one on reconnect.
   // -----------------------------------------------------------------------
 
-  async function teardownActiveSession(): Promise<void> {
+  const sessionIdleTimeoutMsRaw = Number(
+    process.env.MCP_SESSION_IDLE_TIMEOUT_MS || 15 * 60 * 1000,
+  );
+  const sessionIdleTimeoutMs = Number.isFinite(sessionIdleTimeoutMsRaw)
+    ? Math.max(0, sessionIdleTimeoutMsRaw)
+    : 15 * 60 * 1000;
+
+  function markActiveSessionActivity(reason: string): void {
+    if (!activeSession || sessionIdleTimeoutMs <= 0) return;
+
+    activeSession.lastActivityAtMs = Date.now();
+    clearSessionIdleTimer();
+
+    const sessionId = activeSession.id;
+    sessionIdleTimer = setTimeout(() => {
+      void (async () => {
+        if (!activeSession || activeSession.id !== sessionId) return;
+        const idleMs = Date.now() - activeSession.lastActivityAtMs;
+        if (idleMs < sessionIdleTimeoutMs) {
+          markActiveSessionActivity("idle-timeout-reschedule");
+          return;
+        }
+        console.error(
+          `[session] Idle timeout reached for ${sessionId} after ${idleMs}ms (threshold ${sessionIdleTimeoutMs}ms)`,
+        );
+        logMemoryDiag("session-idle-timeout", {
+          session: sessionId,
+          idleMs,
+          timeoutMs: sessionIdleTimeoutMs,
+        });
+        await teardownActiveSession("idle-timeout");
+      })().catch((e) => {
+        console.error("[session] Idle-timeout teardown failed:", e);
+      });
+    }, sessionIdleTimeoutMs);
+    sessionIdleTimer.unref?.();
+
+    const verboseIdleLogs =
+      (process.env.MCP_SESSION_IDLE_VERBOSE || "0").trim().toLowerCase() === "1";
+    if (verboseIdleLogs && reason) {
+      console.error(`[session] Activity heartbeat (${reason}) for ${sessionId}`);
+    }
+  }
+
+  if (sessionIdleTimeoutMs > 0) {
+    console.error(
+      `[session] Idle timeout enabled: ${sessionIdleTimeoutMs}ms (set MCP_SESSION_IDLE_TIMEOUT_MS=0 to disable)`,
+    );
+  } else {
+    console.error("[session] Idle timeout disabled");
+  }
+
+  async function teardownActiveSession(reason = "unspecified"): Promise<void> {
     if (!activeSession) return;
-    console.error(`[session] Tearing down session ${activeSession.id}`);
-    logMemoryDiag("teardown-start", { session: activeSession.id });
+    const closingSession = activeSession;
+    activeSession = null;
+    clearSessionIdleTimer();
+    console.error(
+      `[session] Tearing down session ${closingSession.id} reason=${reason}`,
+    );
+    logMemoryDiag("teardown-start", { session: closingSession.id, reason });
     try {
       await cleanupCurrentSession();
-      await activeSession.transport.close();
+      await closingSession.transport.close();
     } catch (e) {
       console.error("[session] Error during teardown:", e);
     }
-    activeSession = null;
     logMemoryDiag("teardown-complete");
     if (process.env.MCP_GC_AFTER_TEARDOWN === "1" && typeof global.gc === "function") {
       global.gc();
@@ -1988,7 +2300,7 @@ if (useHttpTransport) {
     res: import("node:http").ServerResponse,
   ): Promise<void> {
     // Tear down any prior session first.
-    await teardownActiveSession();
+    await teardownActiveSession("new-session");
 
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
@@ -2002,6 +2314,7 @@ if (useHttpTransport) {
       logMemoryDiag("transport-closed");
       if (activeSession?.transport !== transport) return;
       activeSession = null;
+      clearSessionIdleTimer();
       void cleanupCurrentSession().catch((e) => {
         console.error("[session] cleanup on close error:", e);
       });
@@ -2048,8 +2361,14 @@ if (useHttpTransport) {
     // After the initialize handshake the transport has a sessionId.
     const sid = (transport as unknown as { sessionId?: string }).sessionId;
     if (sid) {
-      activeSession = { id: sid, server: perRequestServer, transport };
+      activeSession = {
+        id: sid,
+        server: perRequestServer,
+        transport,
+        lastActivityAtMs: Date.now(),
+      };
       console.error(`[session] New session created: ${sid}`);
+      markActiveSessionActivity("session-created");
     } else {
       // Without a session id we cannot route further requests here; leaving
       // the transport open leaks an McpServer + handlers on every reconnect.
@@ -2163,17 +2482,23 @@ if (useHttpTransport) {
 
       if (method === "DELETE" && sessionHeader && activeSession && sessionHeader === activeSession.id) {
         // Client explicitly closing the session.
+        markActiveSessionActivity("client-delete");
         try {
           await activeSession.transport.handleRequest(req, res);
         } finally {
-          await teardownActiveSession();
+          await teardownActiveSession("client-delete");
         }
         return;
       }
 
       if (sessionHeader && activeSession && sessionHeader === activeSession.id) {
         // Known session → route to its transport.
-        await activeSession.transport.handleRequest(req, res);
+        markActiveSessionActivity("request-start");
+        try {
+          await activeSession.transport.handleRequest(req, res);
+        } finally {
+          markActiveSessionActivity("request-complete");
+        }
         return;
       }
 

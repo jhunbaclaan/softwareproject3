@@ -20,6 +20,8 @@ from models import TraceItem, AgentRequest, AgentResponse, GeneratedMusicAttachm
 from routes.music import router as music_router
 
 logger = logging.getLogger(__name__)
+AGENT_RUN_TIMEOUT_SECONDS = 300
+MCP_CLIENT_CLEANUP_TIMEOUT_SECONDS = 5.0
 
 # ---------------------------------------------------------------------------
 # Persistent MCP client state
@@ -31,6 +33,58 @@ _client_llm_provider: str = "gemini"
 _client_llm_api_key: str | None = None
 _client_lock = asyncio.Lock()
 _current_run_task: asyncio.Task | None = None
+_background_cleanup_tasks: set[asyncio.Task] = set()
+
+
+def _format_exception_detail(exc: BaseException) -> str:
+    message = str(exc).strip()
+    if message:
+        return f"{type(exc).__name__}: {message}"
+    return type(exc).__name__
+
+
+def _track_background_cleanup_task(task: asyncio.Task, label: str) -> None:
+    _background_cleanup_tasks.add(task)
+
+    def _on_done(done: asyncio.Task) -> None:
+        _background_cleanup_tasks.discard(done)
+        try:
+            done.result()
+        except asyncio.CancelledError:
+            logger.warning("%s cleanup task was cancelled", label)
+        except Exception as exc:
+            logger.warning("%s cleanup task failed in background: %s", label, _format_exception_detail(exc))
+
+    task.add_done_callback(_on_done)
+
+
+async def _cleanup_client_with_timeout(
+    client: MCPClient,
+    label: str,
+    timeout_seconds: float = MCP_CLIENT_CLEANUP_TIMEOUT_SECONDS,
+) -> None:
+    """Try cleanup with timeout without cancelling the cleanup coroutine."""
+    cleanup_task = asyncio.create_task(client.cleanup())
+    try:
+        await asyncio.wait_for(asyncio.shield(cleanup_task), timeout=timeout_seconds)
+    except asyncio.TimeoutError:
+        logger.warning(
+            "%s cleanup exceeded %.1fs; continuing while cleanup finishes in background",
+            label,
+            timeout_seconds,
+        )
+        _track_background_cleanup_task(cleanup_task, label)
+    except asyncio.CancelledError:
+        _track_background_cleanup_task(cleanup_task, label)
+        raise
+    except Exception as exc:
+        logger.warning("%s cleanup failed: %s", label, _format_exception_detail(exc))
+    else:
+        if cleanup_task.done():
+            try:
+                cleanup_task.result()
+            except Exception as exc:
+                logger.warning("%s cleanup failed: %s", label, _format_exception_detail(exc))
 
 
 async def _cancel_current_run():
@@ -132,10 +186,10 @@ async def _ensure_client(request: AgentRequest) -> MCPClient:
                 return client
             except Exception as exc:
                 last_exc = exc
-                try:
-                    await asyncio.wait_for(client.cleanup(), timeout=5.0)
-                except Exception:
-                    logger.warning("Remote MCP client cleanup failed during retry")
+                await _cleanup_client_with_timeout(
+                    client,
+                    "Remote MCP client cleanup during retry",
+                )
 
                 if attempt < retries:
                     backoff_s = min(2.0, 0.5 * attempt)
@@ -164,10 +218,7 @@ async def _ensure_client(request: AgentRequest) -> MCPClient:
 
         if need_new:
             if _client is not None:
-                try:
-                    await asyncio.wait_for(_client.cleanup(), timeout=5.0)
-                except Exception:
-                    logger.warning("Old MCP client cleanup failed; proceeding")
+                await _cleanup_client_with_timeout(_client, "Old MCP client")
                 _client = None
                 _client_project_url = None
                 _client_llm_provider = "gemini"
@@ -199,12 +250,7 @@ async def _shutdown_client():
     """Cleanly tear down the persistent MCP client."""
     global _client, _client_project_url, _client_llm_provider, _client_llm_api_key
     if _client is not None:
-        try:
-            await asyncio.wait_for(_client.cleanup(), timeout=5.0)
-        except (TimeoutError, asyncio.CancelledError):
-            logger.info("MCP client cleanup timed out on shutdown")
-        except Exception as exc:
-            logger.warning("MCP client cleanup error on shutdown: %s", exc)
+        await _cleanup_client_with_timeout(_client, "MCP client cleanup on shutdown")
         _client = None
         _client_project_url = None
         _client_llm_provider = "gemini"
@@ -297,11 +343,18 @@ async def run_agent(request: AgentRequest, http_request: Request):
                                 daw_context=daw_context,
                                 stream_callback=attempt_stream_callback,
                             ),
-                            timeout=300,
+                            timeout=AGENT_RUN_TIMEOUT_SECONDS,
                         )
                         generated = (
                             GeneratedMusicAttachment(**raw_music).model_dump() if raw_music else None
                         )
+                        if generated and isinstance(generated.get("audio_base64"), str):
+                            b64_len = len(generated["audio_base64"])
+                            logger.info(
+                                "[agent-diag] generated_music ready base64_chars=%s approx_decoded_bytes=%s",
+                                b64_len,
+                                (b64_len * 3) // 4,
+                            )
                         await queue.put({"type": "reply", "data": {"reply": reply, "generated_music": generated}})
                         return
                     except Exception as e:
@@ -325,21 +378,34 @@ async def run_agent(request: AgentRequest, http_request: Request):
                         raise
                     finally:
                         if client is not None and _uses_remote_mcp() and not _persist_mcp_client():
-                            try:
-                                await asyncio.wait_for(client.cleanup(), timeout=5.0)
-                            except Exception:
-                                logger.warning("Remote MCP client cleanup failed; proceeding")
+                            await _cleanup_client_with_timeout(
+                                client,
+                                "Remote MCP client cleanup",
+                            )
                         elif not _persist_mcp_client():
                             await _shutdown_client()
             except asyncio.CancelledError:
                 await queue.put({"type": "error", "data": {"error": "Request cancelled."}})
+            except asyncio.TimeoutError:
+                await queue.put(
+                    {
+                        "type": "error",
+                        "data": {
+                            "error": (
+                                f"Agent timed out after {AGENT_RUN_TIMEOUT_SECONDS} seconds. "
+                                "Try a narrower request and rerun."
+                            )
+                        },
+                    }
+                )
             except Exception as e:
-                await queue.put({"type": "error", "data": {"error": f"Agent error: {str(e)}"}})
+                error_detail = str(e).strip() or type(e).__name__
+                await queue.put({"type": "error", "data": {"error": f"Agent error: {error_detail}"}})
             finally:
                 await queue.put(None)
 
         async def keepalive():
-            MAX_KEEPALIVE_DURATION = 330  # slightly longer than the 300s task timeout
+            MAX_KEEPALIVE_DURATION = AGENT_RUN_TIMEOUT_SECONDS + 30
             elapsed = 0
             while elapsed < MAX_KEEPALIVE_DURATION:
                 await asyncio.sleep(10)

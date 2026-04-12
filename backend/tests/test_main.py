@@ -1,4 +1,5 @@
 import pytest
+import asyncio
 from httpx import AsyncClient, ASGITransport
 from main import app, _ensure_client, _client, _client_project_url, _client_llm_provider
 from unittest.mock import patch, AsyncMock, MagicMock
@@ -303,4 +304,25 @@ async def test_agent_run_with_exception():
         assert response.status_code == 200  # FastAPI returns 200 with error in SSE
         data = _parse_sse_reply(response)
         assert "Connection failed" in data.get("error", "")
+
+
+@pytest.mark.asyncio
+async def test_agent_run_timeout_returns_explicit_timeout_message():
+    """Timeouts should surface a clear user-facing error message."""
+    with patch("main._ensure_client", new_callable=AsyncMock) as mock_ensure, \
+         patch("main.run_agent_graph", new_callable=AsyncMock) as mock_run:
+
+        mock_client = AsyncMock()
+        mock_client.set_elevenlabs_api_key = MagicMock()
+        mock_ensure.return_value = mock_client
+        mock_run.side_effect = asyncio.TimeoutError()
+
+        request_data = {"prompt": "mix and master this track"}
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            response = await ac.post("/agent/run", json=request_data)
+
+        assert response.status_code == 200
+        data = _parse_sse_reply(response)
+        assert "timed out after 300 seconds" in data.get("error", "")
 

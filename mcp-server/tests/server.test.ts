@@ -49,10 +49,15 @@ function makeMockDocument(configFields?: Record<string, unknown>, extraEntities?
       getValue: () => true,
       subscribe: () => ({ terminate: () => undefined }),
     },
+    events: {
+      onCreate: () => ({ terminate: () => undefined }),
+      onRemove: () => ({ terminate: () => undefined }),
+    },
     queryEntities: {
       get: () => allEntities,
     },
     start: vi.fn(async () => undefined),
+    stop: vi.fn(async () => undefined),
     modify: vi.fn(async (cb: (t: any) => unknown) => {
       const tx = {
         entities: {
