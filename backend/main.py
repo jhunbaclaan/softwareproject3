@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 import asyncio
 import json
 import logging
+import time
 from agents.mcp_client_new import MCPClient
 from agents.graph import run_agent_graph
 from models import TraceItem, AgentRequest, AgentResponse, GeneratedMusicAttachment
@@ -31,6 +32,61 @@ _client_llm_provider: str = "gemini"
 _client_llm_api_key: str | None = None
 _client_lock = asyncio.Lock()
 _current_run_task: asyncio.Task | None = None
+_last_agent_completed_monotonic: float | None = None
+_mcp_idle_task: asyncio.Task | None = None
+
+
+def _mcp_idle_teardown_seconds() -> float:
+    """Seconds with no finished agent run before dropping the persistent MCP client.
+
+    When ``MCP_CLIENT_PERSIST`` is enabled, this closes the Python MCP session so the
+    MCP server transport closes and Audiotool ``SyncedDocument`` sync can stop.
+
+    ``0`` or negative disables idle teardown.
+    """
+    raw = os.getenv("MCP_IDLE_TEARDOWN_SECONDS", "600").strip()
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return 600.0
+
+
+def _mark_agent_run_finished() -> None:
+    """Record that an agent run ended (success, error, or cancel). Used for MCP idle teardown."""
+    global _last_agent_completed_monotonic
+    _last_agent_completed_monotonic = time.monotonic()
+
+
+async def _mcp_idle_watcher() -> None:
+    """Periodically drop the persistent MCP client after idle timeout (see ``_mcp_idle_teardown_seconds``)."""
+    while True:
+        idle_sec = _mcp_idle_teardown_seconds()
+        if idle_sec <= 0:
+            await asyncio.sleep(60.0)
+            continue
+        poll = min(60.0, max(5.0, idle_sec / 4.0))
+        await asyncio.sleep(poll)
+
+        if not _persist_mcp_client():
+            continue
+        t = _current_run_task
+        if t is not None and not t.done():
+            continue
+
+        async with _client_lock:
+            if _client is None:
+                continue
+            last = _last_agent_completed_monotonic
+            if last is None:
+                continue
+            if time.monotonic() - last < idle_sec:
+                continue
+            logger.info(
+                "MCP idle teardown: no agent activity for %.0fs (limit %.0fs); closing persistent client",
+                time.monotonic() - last,
+                idle_sec,
+            )
+            await _shutdown_client()
 
 
 async def _cancel_current_run():
@@ -217,8 +273,20 @@ async def _shutdown_client():
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    yield
-    await _shutdown_client()
+    global _mcp_idle_task
+    if _mcp_idle_teardown_seconds() > 0:
+        _mcp_idle_task = asyncio.create_task(_mcp_idle_watcher(), name="mcp-idle-watcher")
+    try:
+        yield
+    finally:
+        if _mcp_idle_task is not None:
+            _mcp_idle_task.cancel()
+            try:
+                await _mcp_idle_task
+            except asyncio.CancelledError:
+                pass
+            _mcp_idle_task = None
+        await _shutdown_client()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -336,6 +404,7 @@ async def run_agent(request: AgentRequest, http_request: Request):
             except Exception as e:
                 await queue.put({"type": "error", "data": {"error": f"Agent error: {str(e)}"}})
             finally:
+                _mark_agent_run_finished()
                 await queue.put(None)
 
         async def keepalive():
