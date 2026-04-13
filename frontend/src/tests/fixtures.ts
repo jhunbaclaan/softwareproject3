@@ -49,6 +49,8 @@ export function createMockAudiotoolClient() {
           name: 'projects/new-project-id',
           displayName: 'New Project',
         }),
+        updateProject: vi.fn().mockResolvedValue({}),
+        deleteProject: vi.fn().mockResolvedValue({}),
       },
       sampleService: {
         createSample: vi.fn().mockResolvedValue({

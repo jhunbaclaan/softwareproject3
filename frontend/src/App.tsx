@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createAudiotoolClient,
   getLoginStatus,
@@ -42,6 +42,10 @@ const envScope = readEnv(import.meta.env.VITE_AUDIOTOOL_SCOPE);
 const defaultRedirectUrl =
   envRedirectUrl ??
   (typeof window !== 'undefined' ? `${window.location.origin}/` : 'http://127.0.0.1:5173/');
+const sidebarWidthStorageKey = 'ui.sidebarWidth';
+const defaultSidebarWidth = 300;
+const minSidebarWidth = 240;
+const maxSidebarWidth = 520;
 
 const loadSetting = (key: string, fallback: string) => {
   if (typeof window === 'undefined') {
@@ -63,11 +67,59 @@ const saveSetting = (key: string, value: string) => {
 };
 
 const formatError = (error: unknown) => (error instanceof Error ? error.message : String(error));
+const clampSidebarWidth = (width: number) =>
+  Math.min(maxSidebarWidth, Math.max(minSidebarWidth, width));
 
 const extractProjectId = (name: string) => name.replace(/^projects\//, '');
 
 const getStudioUrl = (projectName: string) =>
   `https://beta.audiotool.com/studio?project=${extractProjectId(projectName)}`;
+
+/**
+ * Accepts an Audiotool studio URL (?project=…), a resource id (`projects/x`), or a bare project id.
+ * Returns the API resource name and the studio URL used for sync.
+ */
+function parseAudiotoolProjectRef(raw: string): { resourceName: string; studioUrl: string } | null {
+  const t = raw.trim();
+  if (!t) {
+    return null;
+  }
+
+  const projectsPrefix = t.match(/^projects\/([^/?#]+)\/?$/i);
+  if (projectsPrefix) {
+    const id = projectsPrefix[1].trim();
+    if (!id) {
+      return null;
+    }
+    const resourceName = `projects/${id}`;
+    return { resourceName, studioUrl: getStudioUrl(resourceName) };
+  }
+
+  let asUrl = t;
+  if (!/^https?:\/\//i.test(asUrl) && /[./]/.test(asUrl)) {
+    asUrl = `https://${asUrl}`;
+  }
+  if (/^https?:\/\//i.test(asUrl)) {
+    try {
+      const u = new URL(asUrl);
+      const q = u.searchParams.get('project');
+      if (q?.trim()) {
+        const id = q.trim();
+        const resourceName = `projects/${id}`;
+        return { resourceName, studioUrl: getStudioUrl(resourceName) };
+      }
+    } catch {
+      /* not a valid URL */
+    }
+  }
+
+  if (!t.includes('/') && !t.includes(' ') && !t.includes('?') && !t.includes('#')) {
+    const resourceName = `projects/${t}`;
+    return { resourceName, studioUrl: getStudioUrl(resourceName) };
+  }
+
+  return null;
+}
 
 const extractAuthTokens = (clientId: string, redirectUrl: string, scope: string): AuthTokens | null => {
   if (typeof window === 'undefined') {
@@ -158,6 +210,10 @@ export default function App() {
   const [projectUrl, setProjectUrl] = useState(
     loadSetting('audiotool.projectUrl', ''),
   );
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const savedWidth = parseInt(loadSetting(sidebarWidthStorageKey, `${defaultSidebarWidth}`), 10);
+    return Number.isFinite(savedWidth) ? clampSidebarWidth(savedWidth) : defaultSidebarWidth;
+  });
   const [projectStatus, setProjectStatus] = useState<
     'idle' | 'connecting' | 'connected' | 'error'
   >('idle');
@@ -172,6 +228,11 @@ export default function App() {
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [createProjectError, setCreateProjectError] = useState<string | null>(null);
   const [connectedProjectName, setConnectedProjectName] = useState<string | null>(null);
+  const [projectSearchQuery, setProjectSearchQuery] = useState('');
+  const [projectManageError, setProjectManageError] = useState<string | null>(null);
+  const [renamingProjectName, setRenamingProjectName] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const [renameSavingFor, setRenameSavingFor] = useState<string | null>(null);
   const [settingsSidebarOpen, setSettingsSidebarOpen] = useState(false);
   const [llmProvider, setLlmProvider] = useState<LLMProvider>(() =>
     (loadSetting('llm.provider', 'gemini') as LLMProvider) || 'gemini'
@@ -463,6 +524,9 @@ export default function App() {
   useEffect(() => {
     saveSetting('audiotool.projectUrl', projectUrl);
   }, [projectUrl]);
+  useEffect(() => {
+    saveSetting(sidebarWidthStorageKey, `${sidebarWidth}`);
+  }, [sidebarWidth]);
 
   useEffect(() => {
     saveSetting('llm.provider', llmProvider);
@@ -513,6 +577,11 @@ export default function App() {
       setProjectList([]);
       setProjectListToken('');
       setConnectedProjectName(null);
+      setProjectSearchQuery('');
+      setProjectManageError(null);
+      setRenamingProjectName(null);
+      setRenameDraft('');
+      setRenameSavingFor(null);
     }
   }, [client]);
 
@@ -572,16 +641,15 @@ export default function App() {
     }
   };
 
-  const handleConnectToProject = async (projectName: string) => {
+  const connectSyncedDocument = async (studioUrl: string, projectResourceName: string) => {
     if (!client) {
       setProjectError('Login first to create a synced document.');
       setProjectStatus('error');
       return;
     }
 
-    const studioUrl = getStudioUrl(projectName);
     setProjectUrl(studioUrl);
-    setConnectedProjectName(projectName);
+    setConnectedProjectName(projectResourceName);
     setProjectStatus('connecting');
     setProjectError(null);
     setMessages([]);
@@ -600,6 +668,21 @@ export default function App() {
       setProjectStatus('error');
       setConnectedProjectName(null);
     }
+  };
+
+  const handleConnectToProject = async (projectName: string) => {
+    await connectSyncedDocument(getStudioUrl(projectName), projectName);
+  };
+
+  const handleConnectFromProjectUrlField = async () => {
+    const parsed = parseAudiotoolProjectRef(projectUrl);
+    if (!parsed) {
+      setProjectError(
+        'Enter a valid Audiotool studio link (with ?project=…), a projects/… id, or a bare project id.',
+      );
+      return;
+    }
+    await connectSyncedDocument(parsed.studioUrl, parsed.resourceName);
   };
 
   const handleDisconnectProject = async () => {
@@ -837,6 +920,136 @@ export default function App() {
   const isActiveProject = (p: ProjectItem) =>
     projectStatus === 'connected' && connectedProjectName === p.name;
 
+  const filteredProjectList = useMemo(() => {
+    const q = projectSearchQuery.trim().toLowerCase();
+    if (!q) {
+      return projectList;
+    }
+    return projectList.filter(
+      (p) =>
+        p.displayName.toLowerCase().includes(q)
+        || extractProjectId(p.name).toLowerCase().includes(q),
+    );
+  }, [projectList, projectSearchQuery]);
+
+  const beginRenameProject = (project: ProjectItem) => {
+    setProjectManageError(null);
+    setRenamingProjectName(project.name);
+    setRenameDraft(project.displayName);
+  };
+
+  const cancelRenameProject = () => {
+    setRenamingProjectName(null);
+    setRenameDraft('');
+    setRenameSavingFor(null);
+  };
+
+  const handleRenameSave = async () => {
+    if (!client || !renamingProjectName) {
+      return;
+    }
+    const trimmed = renameDraft.trim();
+    if (!trimmed) {
+      setProjectManageError('Project name cannot be empty.');
+      return;
+    }
+    setRenameSavingFor(renamingProjectName);
+    setProjectManageError(null);
+    try {
+      const response = await client.api.projectService.updateProject({
+        project: { name: renamingProjectName, displayName: trimmed },
+        updateMask: { paths: ['display_name'] },
+      });
+      if (response instanceof Error) {
+        throw response;
+      }
+      setProjectList((prev) =>
+        prev.map((p) =>
+          p.name === renamingProjectName ? { ...p, displayName: trimmed } : p,
+        ),
+      );
+      cancelRenameProject();
+    } catch (error) {
+      setProjectManageError(formatError(error));
+      setRenameSavingFor(null);
+    }
+  };
+
+  const handleDeleteProject = async (project: ProjectItem) => {
+    if (!client) {
+      return;
+    }
+    const ok = window.confirm(
+      `Delete project "${project.displayName}"? This cannot be undone.`,
+    );
+    if (!ok) {
+      return;
+    }
+    setProjectManageError(null);
+    try {
+      const response = await client.api.projectService.deleteProject({
+        name: project.name,
+      });
+      if (response instanceof Error) {
+        throw response;
+      }
+      if (syncedDocument && connectedProjectName === project.name) {
+        try {
+          await syncedDocument.stop();
+        } catch {
+          /* project is gone; still drop local sync */
+        }
+        setSyncedDocument(null);
+        setProjectStatus('idle');
+        setConnectedProjectName(null);
+      }
+      if (projectUrl.trim() === getStudioUrl(project.name)) {
+        setProjectUrl('');
+      }
+      setProjectList((prev) => prev.filter((p) => p.name !== project.name));
+      if (renamingProjectName === project.name) {
+        cancelRenameProject();
+      }
+    } catch (error) {
+      setProjectManageError(formatError(error));
+    }
+  };
+
+  const handleSidebarResizeStart = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (window.innerWidth <= 768) {
+      return;
+    }
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = sidebarWidth;
+    document.body.classList.add('resizing-sidebar');
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      const delta = moveEvent.clientX - startX;
+      setSidebarWidth(clampSidebarWidth(startWidth + delta));
+    };
+
+    const handleEnd = () => {
+      document.body.classList.remove('resizing-sidebar');
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleEnd);
+    };
+
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleEnd);
+  };
+
+  const handleSidebarResizeKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      setSidebarWidth((prev) => clampSidebarWidth(prev - 12));
+    }
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      setSidebarWidth((prev) => clampSidebarWidth(prev + 12));
+    }
+  };
+
   return (
     <div
       className="page animate-in"
@@ -846,7 +1059,7 @@ export default function App() {
         }
       }}
     >
-      <div className="app-layout">
+      <div className="app-layout" style={{ ['--sidebar-w' as string]: `${sidebarWidth}px` }}>
         <aside className="sidebar">
           <div className="sidebar-brand">
             <p className="eyebrow">Nexus Agent</p>
@@ -900,7 +1113,54 @@ export default function App() {
 
             {client && (
               <>
+                <div className="project-url-connect">
+                  <label className="project-url-connect-label" htmlFor="sidebar-project-url">
+                    Connect by URL
+                  </label>
+                  <p className="hint project-url-connect-hint">
+                    Paste a studio link, <code className="project-url-code">projects/…</code> id, or bare project id.
+                  </p>
+                  <div className="project-url-connect-row">
+                    <input
+                      id="sidebar-project-url"
+                      type="text"
+                      className="project-url-connect-input"
+                      placeholder="https://beta.audiotool.com/studio?project=…"
+                      value={projectUrl}
+                      onChange={(e) => setProjectUrl(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          void handleConnectFromProjectUrlField();
+                        }
+                      }}
+                      aria-label="Project studio URL or project id"
+                    />
+                    <button
+                      type="button"
+                      className="tiny project-url-connect-btn"
+                      onClick={() => void handleConnectFromProjectUrlField()}
+                      disabled={projectStatus === 'connecting' || !projectUrl.trim()}
+                    >
+                      Connect
+                    </button>
+                  </div>
+                </div>
+
                 <h4 className="project-list-heading">Projects</h4>
+
+                <input
+                  type="search"
+                  className="project-search-input"
+                  placeholder="Search projects…"
+                  value={projectSearchQuery}
+                  onChange={(e) => setProjectSearchQuery(e.target.value)}
+                  aria-label="Search projects"
+                />
+
+                {projectManageError && (
+                  <div className="sidebar-error">{projectManageError}</div>
+                )}
 
                 {projectListError && (
                   <div className="sidebar-error">{projectListError}</div>
@@ -909,49 +1169,113 @@ export default function App() {
                 <div className="project-list-scroll">
                   {projectListLoading && projectList.length === 0 ? (
                     <p className="hint centered">Loading...</p>
-                  ) : projectList.length === 0 && !projectListError ? (
-                    <p className="hint centered">No projects yet.</p>
+                  ) : filteredProjectList.length === 0 && !projectListError ? (
+                    <p className="hint centered">
+                      {projectList.length === 0 ? 'No projects yet.' : 'No projects match your search.'}
+                    </p>
                   ) : (
                     <div className="project-list">
-                      {projectList.map((project) => {
+                      {filteredProjectList.map((project) => {
                         const active = isActiveProject(project);
+                        const isRenaming = renamingProjectName === project.name;
                         return (
                           <div
                             key={project.name}
                             className={`project-list-item${active ? ' active' : ''}`}
                           >
-                            <span className="project-list-item-name">
-                              {project.displayName}
-                            </span>
-                            <div className="project-list-item-actions">
-                              {active ? (
-                                <button
-                                  type="button"
-                                  className="ghost tiny"
-                                  onClick={handleDisconnectProject}
-                                >
-                                  Disconnect
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="tiny"
-                                  onClick={() => handleConnectToProject(project.name)}
-                                  disabled={projectStatus === 'connecting'}
-                                >
-                                  Connect
-                                </button>
-                              )}
-                              <a
-                                href={getStudioUrl(project.name)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="open-tab-link"
-                                title="Open in Audiotool"
-                              >
-                                &#8599;
-                              </a>
-                            </div>
+                            {isRenaming ? (
+                              <div className="project-list-item-rename">
+                                <input
+                                  type="text"
+                                  className="project-rename-input"
+                                  value={renameDraft}
+                                  onChange={(e) => setRenameDraft(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Escape') {
+                                      e.preventDefault();
+                                      cancelRenameProject();
+                                    }
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      void handleRenameSave();
+                                    }
+                                  }}
+                                  disabled={renameSavingFor === project.name}
+                                  aria-label="New project name"
+                                />
+                                <div className="project-list-item-rename-actions">
+                                  <button
+                                    type="button"
+                                    className="tiny"
+                                    onClick={() => void handleRenameSave()}
+                                    disabled={renameSavingFor === project.name}
+                                  >
+                                    {renameSavingFor === project.name ? 'Saving…' : 'Save'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="ghost tiny"
+                                    onClick={cancelRenameProject}
+                                    disabled={renameSavingFor === project.name}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="project-list-item-body">
+                                  <span className="project-list-item-name" title={project.displayName}>
+                                    {project.displayName}
+                                  </span>
+                                  <div className="project-list-item-actions">
+                                    {active ? (
+                                      <button
+                                        type="button"
+                                        className="ghost tiny"
+                                        onClick={handleDisconnectProject}
+                                      >
+                                        Disconnect
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        className="tiny"
+                                        onClick={() => handleConnectToProject(project.name)}
+                                        disabled={projectStatus === 'connecting'}
+                                      >
+                                        Connect
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      className="ghost tiny"
+                                      onClick={() => beginRenameProject(project)}
+                                      disabled={projectStatus === 'connecting'}
+                                    >
+                                      Rename
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="ghost tiny project-delete-btn"
+                                      onClick={() => void handleDeleteProject(project)}
+                                      disabled={projectStatus === 'connecting'}
+                                    >
+                                      Delete
+                                    </button>
+                                    <a
+                                      href={getStudioUrl(project.name)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="open-tab-link"
+                                      title="Open in Audiotool"
+                                    >
+                                      &#8599;
+                                    </a>
+                                  </div>
+                                </div>
+                              </>
+                            )}
                           </div>
                         );
                       })}
@@ -983,6 +1307,18 @@ export default function App() {
             )}
           </div>
         </aside>
+        <div
+          className="sidebar-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize console width"
+          aria-valuemin={minSidebarWidth}
+          aria-valuemax={maxSidebarWidth}
+          aria-valuenow={sidebarWidth}
+          tabIndex={0}
+          onPointerDown={handleSidebarResizeStart}
+          onKeyDown={handleSidebarResizeKeyDown}
+        />
 
         <div className="main-area">
           <header className="main-header">

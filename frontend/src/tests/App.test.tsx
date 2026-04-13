@@ -18,6 +18,8 @@ vi.mock('@audiotool/nexus', () => ({
         createProject: vi.fn().mockResolvedValue({
           project: { name: 'projects/new-123', displayName: 'New Project' },
         }),
+        updateProject: vi.fn().mockResolvedValue({}),
+        deleteProject: vi.fn().mockResolvedValue({}),
       },
     },
     createSyncedDocument: vi.fn().mockResolvedValue({
@@ -211,6 +213,8 @@ describe('App component', () => {
               nextPageToken: '',
             }),
             createProject: vi.fn(),
+            updateProject: vi.fn().mockResolvedValue({}),
+            deleteProject: vi.fn().mockResolvedValue({}),
           },
         },
         createSyncedDocument: vi.fn(),
@@ -232,6 +236,53 @@ describe('App component', () => {
       await waitFor(() => {
         expect(screen.getByText('My Song')).toBeTruthy();
       });
+
+      expect(screen.getByText('Connect by URL')).toBeTruthy();
+      expect(screen.getByLabelText('Project studio URL or project id')).toBeTruthy();
+    });
+
+    it('filters projects by search query', async () => {
+      await setupLoggedIn();
+      const { createAudiotoolClient } = await getAudiotoolMock();
+
+      (createAudiotoolClient as ReturnType<typeof vi.fn>).mockResolvedValue({
+        api: {
+          projectService: {
+            listProjects: vi.fn().mockResolvedValue({
+              projects: [
+                { name: 'projects/abc', displayName: 'My Song' },
+                { name: 'projects/def', displayName: 'Other Beat' },
+              ],
+              nextPageToken: '',
+            }),
+            createProject: vi.fn(),
+            updateProject: vi.fn().mockResolvedValue({}),
+            deleteProject: vi.fn().mockResolvedValue({}),
+          },
+        },
+        createSyncedDocument: vi.fn(),
+      });
+
+      await act(async () => {
+        render(<App />);
+      });
+      dismissTutorial();
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('Check'));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('My Song')).toBeTruthy();
+      });
+
+      const search = screen.getByLabelText('Search projects');
+      fireEvent.change(search, { target: { value: 'zzz' } });
+
+      await waitFor(() => {
+        expect(screen.queryByText('My Song')).toBeNull();
+      });
+      expect(screen.getByText('No projects match your search.')).toBeTruthy();
     });
   });
 
