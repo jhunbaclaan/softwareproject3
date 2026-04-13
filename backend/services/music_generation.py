@@ -5,12 +5,43 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 import os
+import time
 from typing import Any, Optional, Tuple
 
 # Matches backend.routes.music.MusicGenerateRequest.prompt max_length
 MAX_MUSIC_PROMPT_LENGTH = 5000
 _TRUNC_SUFFIX = " [truncated]"
+logger = logging.getLogger(__name__)
+_MB = 1024 * 1024
+
+
+def _rss_mb() -> Optional[int]:
+    try:
+        with open("/proc/self/statm", "r", encoding="utf-8") as f:
+            fields = f.read().strip().split()
+        if len(fields) >= 2:
+            page_size = os.sysconf("SC_PAGE_SIZE")
+            return int((int(fields[1]) * page_size) / _MB)
+    except Exception:
+        pass
+    try:
+        import resource  # type: ignore
+
+        rss_kb = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        if rss_kb > 0:
+            return int(rss_kb / 1024)
+    except Exception:
+        pass
+    return None
+
+
+def _mem_diag() -> str:
+    rss = _rss_mb()
+    if rss is None:
+        return "rss=unknown"
+    return f"rss={rss}MB"
 
 
 def clamp_music_prompt(prompt: str) -> str:
@@ -110,6 +141,15 @@ async def generate_music_bytes(
     """Stream music from ElevenLabs and return raw audio bytes."""
     from elevenlabs.client import ElevenLabs
 
+    logger.info(
+        "[elevenlabs-diag] generate_music_bytes:start prompt_len=%s length_ms=%s instrumental=%s output_format=%s %s",
+        len(prompt),
+        music_length_ms,
+        force_instrumental,
+        output_format,
+        _mem_diag(),
+    )
+    started = time.perf_counter()
     client = ElevenLabs(api_key=api_key)
     kwargs = {
         "prompt": prompt,
@@ -119,13 +159,26 @@ async def generate_music_bytes(
     if music_length_ms is not None:
         kwargs["music_length_ms"] = music_length_ms
 
-    def _generate() -> bytes:
-        chunks = []
-        for chunk in client.music.stream(**kwargs):
-            chunks.append(chunk)
-        return b"".join(chunks)
+    chunk_count = 0
 
-    return await asyncio.to_thread(_generate)
+    def _generate() -> bytes:
+        nonlocal chunk_count
+        audio = bytearray()
+        for chunk in client.music.stream(**kwargs):
+            chunk_count += 1
+            audio.extend(chunk)
+        return bytes(audio)
+
+    audio_bytes = await asyncio.to_thread(_generate)
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+    logger.info(
+        "[elevenlabs-diag] generate_music_bytes:done bytes=%s chunks=%s elapsed_ms=%s %s",
+        len(audio_bytes),
+        chunk_count,
+        elapsed_ms,
+        _mem_diag(),
+    )
+    return audio_bytes
 
 
 async def generate_music_base64(
@@ -144,6 +197,14 @@ async def generate_music_base64(
             "ElevenLabs API key under \"ElevenLabs API Key\"."
         )
     prompt = clamp_music_prompt(prompt)
+    logger.info(
+        "[elevenlabs-diag] generate_music_base64:start prompt_len=%s length_ms=%s instrumental=%s output_format=%s %s",
+        len(prompt),
+        music_length_ms,
+        force_instrumental,
+        output_format,
+        _mem_diag(),
+    )
     audio = await generate_music_bytes(
         prompt=prompt,
         music_length_ms=music_length_ms,
@@ -154,4 +215,11 @@ async def generate_music_base64(
     if not audio:
         raise ValueError("ElevenLabs returned no audio data.")
     b64 = base64.b64encode(audio).decode("ascii")
+    logger.info(
+        "[elevenlabs-diag] generate_music_base64:done bytes=%s base64_chars=%s approx_decoded_bytes=%s %s",
+        len(audio),
+        len(b64),
+        (len(b64) * 3) // 4,
+        _mem_diag(),
+    )
     return b64, output_format, prompt, music_length_ms

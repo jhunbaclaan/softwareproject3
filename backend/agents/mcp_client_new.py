@@ -209,7 +209,10 @@ class MCPClient:
         if self.session is None:
             raise RuntimeError("Not connected – call connect_to_server() first")
         result = await self.session.call_tool(tool_name, tool_args)
-        return self._extract_tool_result(result), None
+        result_text = self._extract_tool_result(result)
+        if getattr(result, "isError", False):
+            raise RuntimeError(result_text)
+        return result_text, None
 
     async def _execute_generate_music(
         self, tool_args: dict
@@ -240,6 +243,11 @@ class MCPClient:
                 f"ElevenLabs music generation failed: {format_elevenlabs_exception(e)}",
                 None,
             )
+        print(
+            "[MCP Client] generate-music-elevenlabs payload stats: "
+            f"base64_chars={len(b64)} approx_decoded_bytes={(len(b64) * 3) // 4} "
+            f"music_length_ms={ms} format={fmt}"
+        )
 
         inst_note = (
             " Instrumental-only (force_instrumental true): lyrics in the prompt are not sung; "

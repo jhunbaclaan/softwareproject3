@@ -33,6 +33,7 @@ Install steps are in **[README.md](README.md)**.
 Do **not** commit secrets. **`.env`** is gitignored; use local env files per team practice. Keep machine-only paths in user/editor settings, not in shared agent rules.
 
 - **`MCP_IDLE_TEARDOWN_SECONDS`** (backend, default **600**): after this many seconds with no finished **`/agent/run`** (and with **`MCP_CLIENT_PERSIST`** enabled), the backend closes the persistent MCP client so the MCP server can tear down Audiotool sync. Set to **0** to disable idle teardown.
+- **`MCP_REMOTE_CLIENT_PERSIST`** (backend, default **0**): opt-in toggle for persistent MCP client reuse when **`MCP_SERVER_URL`** points to a remote HTTP MCP server. Keep this off unless you explicitly want long-lived remote sessions.
 
 ## Deployment
 
