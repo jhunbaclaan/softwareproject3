@@ -66,6 +66,130 @@ const saveSetting = (key: string, value: string) => {
   }
 };
 
+type ChatIndexEntry = {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  userRenamed?: boolean;
+  projectName?: string;
+  projectDisplayName?: string;
+  projectUrl?: string;
+};
+
+type StoredMessage = {
+  id: string;
+  role: Role;
+  content: string;
+  timestamp: string;
+};
+
+type StoredChat = ChatIndexEntry & { messages: StoredMessage[] };
+
+const chatHistoryIndexKey = 'chatHistory.index';
+const chatHistoryCurrentKey = 'chatHistory.currentId';
+const chatHistoryChatKeyPrefix = 'chatHistory.chat.';
+
+const loadChatIndex = (): ChatIndexEntry[] => {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+  try {
+    const raw = window.localStorage.getItem(chatHistoryIndexKey);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.filter(
+      (e): e is ChatIndexEntry =>
+        e && typeof e.id === 'string' && typeof e.title === 'string',
+    );
+  } catch {
+    return [];
+  }
+};
+
+const saveChatIndex = (index: ChatIndexEntry[]) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    window.localStorage.setItem(chatHistoryIndexKey, JSON.stringify(index));
+  } catch {
+    /* quota exceeded or serialization error - ignore */
+  }
+};
+
+const loadStoredChat = (id: string): StoredChat | null => {
+  if (typeof window === 'undefined' || !id) {
+    return null;
+  }
+  try {
+    const raw = window.localStorage.getItem(chatHistoryChatKeyPrefix + id);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed.id !== 'string' || !Array.isArray(parsed.messages)) {
+      return null;
+    }
+    return parsed as StoredChat;
+  } catch {
+    return null;
+  }
+};
+
+const saveStoredChat = (chat: StoredChat) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    window.localStorage.setItem(
+      chatHistoryChatKeyPrefix + chat.id,
+      JSON.stringify(chat),
+    );
+  } catch {
+    /* quota exceeded - ignore */
+  }
+};
+
+const deleteStoredChat = (id: string) => {
+  if (typeof window === 'undefined' || !id) {
+    return;
+  }
+  window.localStorage.removeItem(chatHistoryChatKeyPrefix + id);
+};
+
+const loadCurrentChatId = (): string | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  return window.localStorage.getItem(chatHistoryCurrentKey);
+};
+
+const saveCurrentChatId = (id: string | null) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  if (id) {
+    window.localStorage.setItem(chatHistoryCurrentKey, id);
+  } else {
+    window.localStorage.removeItem(chatHistoryCurrentKey);
+  }
+};
+
+const deriveChatTitle = (messages: Pick<Message, 'role' | 'content'>[]): string => {
+  const firstUser = messages.find((m) => m.role === 'user' && m.content.trim());
+  if (firstUser) {
+    const text = firstUser.content.trim().replace(/\s+/g, ' ');
+    return text.length > 48 ? `${text.slice(0, 48).trimEnd()}…` : text;
+  }
+  return `Chat ${new Date().toLocaleString()}`;
+};
+
 const formatError = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const clampSidebarWidth = (width: number) =>
   Math.min(maxSidebarWidth, Math.max(minSidebarWidth, width));
@@ -304,6 +428,29 @@ export default function App() {
   const cogwheelRef = useRef<HTMLButtonElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
+  const [chatIndex, setChatIndex] = useState<ChatIndexEntry[]>(() => loadChatIndex());
+  const [currentChatId, setCurrentChatId] = useState<string | null>(() => {
+    const id = loadCurrentChatId();
+    if (!id) return null;
+    return loadStoredChat(id) ? id : null;
+  });
+  const [chatDrawerOpen, setChatDrawerOpen] = useState<boolean>(
+    () => loadSetting('ui.chatDrawerOpen', 'false') === 'true',
+  );
+  const [chatSearchQuery, setChatSearchQuery] = useState('');
+  const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
+  const [chatRenameDraft, setChatRenameDraft] = useState('');
+  const [reconnectPrompt, setReconnectPrompt] = useState<{
+    chatId: string;
+    projectName: string;
+    projectDisplayName: string;
+    projectUrl: string;
+    projectMissing: boolean;
+  } | null>(null);
+  const hydratedFromCurrentRef = useRef(false);
+  const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipNextSaveRef = useRef(false);
+
   const tutorialSteps = [
     { title: 'Console', text: 'This is the console where you can log in and manage your projects. Click "Connect" to connect to a project or "New Project" to create a new project. Click the arrow next the project name to open it in a new tab.' },
     { title: 'Chat Box', text: 'This is the chat box where you can talk to the agent, paste ABC notation, generate music, or learn how to use the DAW.' },
@@ -510,6 +657,108 @@ export default function App() {
   }, [sidebarWidth]);
 
   useEffect(() => {
+    saveSetting('ui.chatDrawerOpen', chatDrawerOpen ? 'true' : 'false');
+  }, [chatDrawerOpen]);
+
+  useEffect(() => {
+    if (hydratedFromCurrentRef.current) {
+      return;
+    }
+    hydratedFromCurrentRef.current = true;
+    const id = loadCurrentChatId();
+    if (!id) return;
+    const stored = loadStoredChat(id);
+    if (!stored) {
+      saveCurrentChatId(null);
+      return;
+    }
+    const hydrated: Message[] = stored.messages.map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      timestamp: m.timestamp,
+    }));
+    skipNextSaveRef.current = true;
+    setMessages(hydrated);
+    setCurrentChatId(stored.id);
+  }, []);
+
+  useEffect(() => {
+    if (!hydratedFromCurrentRef.current) {
+      return;
+    }
+    if (messages.length === 0) {
+      return;
+    }
+    if (skipNextSaveRef.current) {
+      skipNextSaveRef.current = false;
+      return;
+    }
+    if (saveDebounceRef.current) {
+      clearTimeout(saveDebounceRef.current);
+    }
+    saveDebounceRef.current = setTimeout(() => {
+      setCurrentChatId((existingId) => {
+        const id = existingId ?? createId();
+        const now = Date.now();
+        const storedMessages: StoredMessage[] = messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp,
+        }));
+
+        const connectedProject = projectList.find((p) => p.name === connectedProjectName);
+        const projectName =
+          projectStatus === 'connected' && connectedProjectName
+            ? connectedProjectName
+            : undefined;
+        const projectDisplayName = connectedProject?.displayName;
+        const projectUrlForChat =
+          projectStatus === 'connected' && projectUrl.trim() ? projectUrl.trim() : undefined;
+
+        setChatIndex((prev) => {
+          const existing = prev.find((e) => e.id === id);
+          const userRenamed = existing?.userRenamed === true;
+          const title = userRenamed ? existing!.title : deriveChatTitle(messages);
+          const createdAt = existing?.createdAt ?? now;
+
+          const entry: ChatIndexEntry = {
+            id,
+            title,
+            createdAt,
+            updatedAt: now,
+            userRenamed: userRenamed || undefined,
+            projectName,
+            projectDisplayName,
+            projectUrl: projectUrlForChat,
+          };
+
+          const stored: StoredChat = { ...entry, messages: storedMessages };
+          saveStoredChat(stored);
+
+          const next = existing
+            ? prev.map((e) => (e.id === id ? entry : e))
+            : [entry, ...prev];
+          saveChatIndex(next);
+          return next;
+        });
+
+        if (existingId !== id) {
+          saveCurrentChatId(id);
+        }
+        return id;
+      });
+    }, 400);
+
+    return () => {
+      if (saveDebounceRef.current) {
+        clearTimeout(saveDebounceRef.current);
+      }
+    };
+  }, [messages, connectedProjectName, projectUrl, projectStatus, projectList]);
+
+  useEffect(() => {
     saveSetting('llm.provider', llmProvider);
   }, [llmProvider]);
   useEffect(() => {
@@ -622,7 +871,11 @@ export default function App() {
     }
   };
 
-  const connectSyncedDocument = async (studioUrl: string, projectResourceName: string) => {
+  const connectSyncedDocument = async (
+    studioUrl: string,
+    projectResourceName: string,
+    options: { preserveMessages?: boolean } = {},
+  ) => {
     if (!client) {
       setProjectError('Login first to create a synced document.');
       setProjectStatus('error');
@@ -633,7 +886,9 @@ export default function App() {
     setConnectedProjectName(projectResourceName);
     setProjectStatus('connecting');
     setProjectError(null);
-    setMessages([]);
+    if (!options.preserveMessages) {
+      setMessages([]);
+    }
     try {
       if (syncedDocument) {
         await syncedDocument.stop();
@@ -881,6 +1136,161 @@ export default function App() {
 
   const handleReset = () => {
     setMessages([]);
+  };
+
+  const handleNewChat = () => {
+    if (saveDebounceRef.current) {
+      clearTimeout(saveDebounceRef.current);
+      saveDebounceRef.current = null;
+    }
+    setMessages([]);
+    setCurrentChatId(null);
+    saveCurrentChatId(null);
+    setRenamingChatId(null);
+    setChatRenameDraft('');
+  };
+
+  const handleLoadChat = (entry: ChatIndexEntry) => {
+    const stored = loadStoredChat(entry.id);
+    if (!stored) {
+      setChatIndex((prev) => {
+        const next = prev.filter((e) => e.id !== entry.id);
+        saveChatIndex(next);
+        return next;
+      });
+      return;
+    }
+    if (saveDebounceRef.current) {
+      clearTimeout(saveDebounceRef.current);
+      saveDebounceRef.current = null;
+    }
+    const hydrated: Message[] = stored.messages.map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      timestamp: m.timestamp,
+    }));
+    skipNextSaveRef.current = true;
+    setMessages(hydrated);
+    setCurrentChatId(stored.id);
+    saveCurrentChatId(stored.id);
+
+    if (stored.projectName) {
+      const alreadyConnected =
+        projectStatus === 'connected' && connectedProjectName === stored.projectName;
+      if (!alreadyConnected) {
+        const match = projectList.find((p) => p.name === stored.projectName);
+        const projectMissing = !match && !projectListToken && !projectListLoading;
+        const displayName =
+          match?.displayName
+          ?? stored.projectDisplayName
+          ?? extractProjectId(stored.projectName);
+        const url = stored.projectUrl ?? getStudioUrl(stored.projectName);
+        setReconnectPrompt({
+          chatId: stored.id,
+          projectName: stored.projectName,
+          projectDisplayName: displayName,
+          projectUrl: url,
+          projectMissing,
+        });
+      }
+    }
+  };
+
+  const handleReconnectConfirm = async () => {
+    if (!reconnectPrompt) return;
+    const { projectUrl: url, projectName } = reconnectPrompt;
+    setReconnectPrompt(null);
+    await connectSyncedDocument(url, projectName, { preserveMessages: true });
+  };
+
+  const handleReconnectSkip = () => {
+    setReconnectPrompt(null);
+  };
+
+  const beginRenameChat = (entry: ChatIndexEntry) => {
+    setRenamingChatId(entry.id);
+    setChatRenameDraft(entry.title);
+  };
+
+  const cancelRenameChat = () => {
+    setRenamingChatId(null);
+    setChatRenameDraft('');
+  };
+
+  const handleRenameChatSave = () => {
+    if (!renamingChatId) return;
+    const trimmed = chatRenameDraft.trim();
+    if (!trimmed) {
+      cancelRenameChat();
+      return;
+    }
+    setChatIndex((prev) => {
+      const next = prev.map((e) =>
+        e.id === renamingChatId
+          ? { ...e, title: trimmed, userRenamed: true, updatedAt: Date.now() }
+          : e,
+      );
+      saveChatIndex(next);
+      const stored = loadStoredChat(renamingChatId);
+      if (stored) {
+        const updated: StoredChat = {
+          ...stored,
+          title: trimmed,
+          userRenamed: true,
+          updatedAt: Date.now(),
+        };
+        saveStoredChat(updated);
+      }
+      return next;
+    });
+    cancelRenameChat();
+  };
+
+  const handleDeleteChat = (entry: ChatIndexEntry) => {
+    const ok = window.confirm(`Delete chat "${entry.title}"? This cannot be undone.`);
+    if (!ok) return;
+    deleteStoredChat(entry.id);
+    setChatIndex((prev) => {
+      const next = prev.filter((e) => e.id !== entry.id);
+      saveChatIndex(next);
+      return next;
+    });
+    if (currentChatId === entry.id) {
+      if (saveDebounceRef.current) {
+        clearTimeout(saveDebounceRef.current);
+        saveDebounceRef.current = null;
+      }
+      setMessages([]);
+      setCurrentChatId(null);
+      saveCurrentChatId(null);
+    }
+    if (renamingChatId === entry.id) {
+      cancelRenameChat();
+    }
+  };
+
+  const filteredChatIndex = useMemo(() => {
+    const sorted = [...chatIndex].sort((a, b) => b.updatedAt - a.updatedAt);
+    const q = chatSearchQuery.trim().toLowerCase();
+    if (!q) return sorted;
+    return sorted.filter(
+      (e) =>
+        e.title.toLowerCase().includes(q)
+        || (e.projectDisplayName?.toLowerCase().includes(q) ?? false),
+    );
+  }, [chatIndex, chatSearchQuery]);
+
+  const formatRelativeTime = (ms: number): string => {
+    const diff = Date.now() - ms;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    return new Date(ms).toLocaleDateString();
   };
 
   const authPillClass = `status-pill ${authStatus?.loggedIn ? 'ok' : 'warn'}`;
@@ -1309,6 +1719,142 @@ export default function App() {
           onKeyDown={handleSidebarResizeKeyDown}
         />
 
+        {chatDrawerOpen && (
+          <aside
+            className="chat-history-drawer animate-in"
+            onAnimationEnd={(e) => {
+              if (e.animationName === 'slideInFromLeft') {
+                e.currentTarget.classList.remove('animate-in');
+              }
+            }}
+          >
+            <div className="chat-history-header">
+              <h3>Chats</h3>
+              <div className="chat-history-header-actions">
+                <button type="button" className="tiny" onClick={handleNewChat}>
+                  New
+                </button>
+                <button
+                  type="button"
+                  className="close-btn"
+                  onClick={() => setChatDrawerOpen(false)}
+                  aria-label="Close chat history"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            <div className="chat-history-content">
+              <input
+                type="search"
+                className="project-search-input"
+                placeholder="Search chats…"
+                value={chatSearchQuery}
+                onChange={(e) => setChatSearchQuery(e.target.value)}
+                aria-label="Search chats"
+              />
+              <div className="chat-list-scroll">
+                {filteredChatIndex.length === 0 ? (
+                  <p className="hint centered">
+                    {chatIndex.length === 0
+                      ? 'No chats yet. Start typing to create one.'
+                      : 'No chats match your search.'}
+                  </p>
+                ) : (
+                  <div className="chat-list">
+                    {filteredChatIndex.map((entry) => {
+                      const active = currentChatId === entry.id;
+                      const isRenaming = renamingChatId === entry.id;
+                      return (
+                        <div
+                          key={entry.id}
+                          className={`chat-list-item${active ? ' active' : ''}`}
+                        >
+                          {isRenaming ? (
+                            <div className="chat-list-item-rename">
+                              <input
+                                type="text"
+                                className="project-rename-input"
+                                value={chatRenameDraft}
+                                onChange={(e) => setChatRenameDraft(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Escape') {
+                                    e.preventDefault();
+                                    cancelRenameChat();
+                                  }
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleRenameChatSave();
+                                  }
+                                }}
+                                autoFocus
+                                aria-label="New chat title"
+                              />
+                              <div className="project-list-item-rename-actions">
+                                <button
+                                  type="button"
+                                  className="tiny"
+                                  onClick={handleRenameChatSave}
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  className="ghost tiny"
+                                  onClick={cancelRenameChat}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className="chat-list-item-main"
+                                onClick={() => handleLoadChat(entry)}
+                                title={entry.title}
+                              >
+                                <span className="chat-list-item-title">{entry.title}</span>
+                                <span className="chat-list-item-meta">
+                                  {formatRelativeTime(entry.updatedAt)}
+                                  {entry.projectDisplayName && (
+                                    <span className="chat-list-item-project" title={entry.projectDisplayName}>
+                                      · {entry.projectDisplayName}
+                                    </span>
+                                  )}
+                                </span>
+                              </button>
+                              <div className="chat-list-item-actions">
+                                <button
+                                  type="button"
+                                  className="ghost tiny"
+                                  onClick={() => beginRenameChat(entry)}
+                                  title="Rename chat"
+                                >
+                                  Rename
+                                </button>
+                                <button
+                                  type="button"
+                                  className="ghost tiny project-delete-btn"
+                                  onClick={() => handleDeleteChat(entry)}
+                                  title="Delete chat"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </aside>
+        )}
+
         <div className="main-area">
           <header className="main-header">
             <div>
@@ -1319,6 +1865,19 @@ export default function App() {
               </p>
             </div>
             <div className="header-actions">
+              <button
+                type="button"
+                className={`ghost small${chatDrawerOpen ? ' active' : ''}`}
+                onClick={() => setChatDrawerOpen((v) => !v)}
+                aria-pressed={chatDrawerOpen}
+                aria-label="Toggle chat history"
+                title="Chat history"
+              >
+                History
+              </button>
+              <button type="button" className="ghost small" onClick={handleNewChat}>
+                New chat
+              </button>
               <button type="button" className="ghost small" onClick={handleReset}>
                 Clear chat
               </button>
@@ -1687,6 +2246,57 @@ export default function App() {
           </aside>
         )}
       </div>
+
+      {reconnectPrompt && (
+        <div
+          className="tutorial-overlay animate-in"
+          onClick={handleReconnectSkip}
+          onAnimationEnd={(e) => {
+            if (e.animationName === 'fadeIn') {
+              e.currentTarget.classList.remove('animate-in');
+            }
+          }}
+        >
+          <div
+            className="tutorial-modal reconnect-modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ left: 'calc(50vw - 200px)', top: 'calc(50vh - 120px)', maxWidth: 400 }}
+          >
+            <div className="tutorial-header">
+              <span className="tutorial-step-spacer"></span>
+              <h2>Reconnect to project?</h2>
+              <span className="tutorial-step-spacer"></span>
+            </div>
+            <p>
+              This chat was previously connected to{' '}
+              <strong>{reconnectPrompt.projectDisplayName}</strong>.
+              {projectStatus === 'connected' && connectedProjectName
+                ? " You're currently connected to a different project."
+                : ''}
+            </p>
+            {reconnectPrompt.projectMissing && (
+              <p className="music-error" style={{ marginTop: 0 }}>
+                Warning: this project may no longer exist in your account.
+              </p>
+            )}
+            {!client && (
+              <p className="hint centered">Log in first to reconnect.</p>
+            )}
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: 12 }}>
+              <button type="button" className="ghost" onClick={handleReconnectSkip}>
+                Skip
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleReconnectConfirm()}
+                disabled={!client || projectStatus === 'connecting'}
+              >
+                {reconnectPrompt.projectMissing ? 'Try anyway' : 'Reconnect'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {tutorialStep > 0 && tutorialStep <= tutorialSteps.length && (
         <div
