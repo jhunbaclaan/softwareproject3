@@ -1643,7 +1643,7 @@ export default function App() {
               </div>
 
               <div className="settings-section">
-                <h4>Developer Settings</h4>
+                <h4>API Settings</h4>
                 <div className="setting-item horizontal">
                   <span className="setting-label">Provider</span>
                   <select
