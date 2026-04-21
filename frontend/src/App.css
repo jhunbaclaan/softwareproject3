@@ -1480,6 +1480,74 @@ input[type="number"] {
     margin-bottom: 6px;
 }
 
+.message-content {
+    white-space: normal;
+    word-break: break-word;
+}
+
+.message-content p {
+    margin: 0 0 8px 0;
+    white-space: pre-wrap;
+}
+
+.message-content p:last-child {
+    margin-bottom: 0;
+}
+
+.message-content ul,
+.message-content ol {
+    margin: 4px 0 8px 0;
+    padding-left: 20px;
+}
+
+.message-content li {
+    margin: 2px 0;
+}
+
+.message-content code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.9em;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+}
+
+.message-content pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85em;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 6px 0;
+    overflow-x: auto;
+}
+
+.message-content pre code {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+.message-content strong {
+    font-weight: 600;
+}
+
+.message-content a {
+    color: var(--accent, currentColor);
+    text-decoration: underline;
+}
+
+.message-content h3,
+.message-content h4,
+.message-content h5,
+.message-content h6 {
+    margin: 8px 0 4px 0;
+    font-size: 1em;
+    font-weight: 600;
+}
+
 .abc-input-section {
     grid-column: 1 / -1;
 }

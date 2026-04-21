@@ -8,26 +8,39 @@ import App from '../App';
 
 const mockLogin = vi.fn();
 const mockLogout = vi.fn();
-const mockGetUserName = vi.fn().mockResolvedValue('TestUser');
+const createMockAuthenticatedClient = (overrides: Record<string, unknown> = {}) => ({
+  status: 'authenticated' as const,
+  userName: 'TestUser',
+  login: mockLogin,
+  logout: mockLogout,
+  exportTokens: vi.fn().mockReturnValue({
+    accessToken: 'exported-access-token',
+    refreshToken: 'exported-refresh-token',
+    expiresAt: 1234567890000,
+  }),
+  projects: {
+    listProjects: vi.fn().mockResolvedValue({ projects: [], nextPageToken: '' }),
+    createProject: vi.fn().mockResolvedValue({
+      project: { name: 'projects/new-123', displayName: 'New Project' },
+    }),
+    updateProject: vi.fn().mockResolvedValue({}),
+    deleteProject: vi.fn().mockResolvedValue({}),
+  },
+  open: vi.fn().mockResolvedValue({
+    start: vi.fn().mockResolvedValue(undefined),
+    stop: vi.fn().mockResolvedValue(undefined),
+  }),
+  ...overrides,
+});
+
+const createMockUnauthenticatedClient = () => ({
+  status: 'unauthenticated' as const,
+  login: mockLogin,
+  logout: mockLogout,
+});
 
 vi.mock('@audiotool/nexus', () => ({
-  createAudiotoolClient: vi.fn().mockResolvedValue({
-    api: {
-      projectService: {
-        listProjects: vi.fn().mockResolvedValue({ projects: [], nextPageToken: '' }),
-        createProject: vi.fn().mockResolvedValue({
-          project: { name: 'projects/new-123', displayName: 'New Project' },
-        }),
-        updateProject: vi.fn().mockResolvedValue({}),
-        deleteProject: vi.fn().mockResolvedValue({}),
-      },
-    },
-    createSyncedDocument: vi.fn().mockResolvedValue({
-      start: vi.fn().mockResolvedValue(undefined),
-      stop: vi.fn().mockResolvedValue(undefined),
-    }),
-  }),
-  getLoginStatus: vi.fn().mockResolvedValue({ loggedIn: false }),
+  audiotool: vi.fn().mockResolvedValue({ status: 'unauthenticated' }),
 }));
 
 vi.mock('../api', () => ({
@@ -52,25 +65,20 @@ const getAudiotoolMock = async () => await import('@audiotool/nexus');
 const getApiMock = async () => await import('../api');
 
 /**
- * Configure getLoginStatus to return a logged-in status on the next call.
+ * Configure audiotool() to return an authenticated client on the next call.
  * Returns the mock status object so tests can assert on login/logout calls.
  */
 const setupLoggedIn = async () => {
-  const { getLoginStatus } = await getAudiotoolMock();
-  const status = {
-    loggedIn: true,
-    login: mockLogin,
-    logout: mockLogout,
-    getUserName: mockGetUserName,
-  };
-  (getLoginStatus as ReturnType<typeof vi.fn>).mockResolvedValue(status);
+  const { audiotool } = await getAudiotoolMock();
+  const status = createMockAuthenticatedClient();
+  (audiotool as ReturnType<typeof vi.fn>).mockResolvedValue(status);
   return status;
 };
 
 const setupLoggedOut = async () => {
-  const { getLoginStatus } = await getAudiotoolMock();
-  const status = { loggedIn: false, login: mockLogin, logout: mockLogout };
-  (getLoginStatus as ReturnType<typeof vi.fn>).mockResolvedValue(status);
+  const { audiotool } = await getAudiotoolMock();
+  const status = createMockUnauthenticatedClient();
+  (audiotool as ReturnType<typeof vi.fn>).mockResolvedValue(status);
   return status;
 };
 
@@ -202,12 +210,12 @@ describe('App component', () => {
 
     it('shows project list heading when logged in', async () => {
       await setupLoggedIn();
-      const { getLoginStatus, createAudiotoolClient } = await getAudiotoolMock();
+      const { audiotool } = await getAudiotoolMock();
 
       // Mock list returning one project
-      (createAudiotoolClient as ReturnType<typeof vi.fn>).mockResolvedValue({
-        api: {
-          projectService: {
+      (audiotool as ReturnType<typeof vi.fn>).mockResolvedValue(
+        createMockAuthenticatedClient({
+          projects: {
             listProjects: vi.fn().mockResolvedValue({
               projects: [{ name: 'projects/abc', displayName: 'My Song' }],
               nextPageToken: '',
@@ -216,9 +224,8 @@ describe('App component', () => {
             updateProject: vi.fn().mockResolvedValue({}),
             deleteProject: vi.fn().mockResolvedValue({}),
           },
-        },
-        createSyncedDocument: vi.fn(),
-      });
+        }),
+      );
 
       await act(async () => {
         render(<App />);
@@ -243,11 +250,11 @@ describe('App component', () => {
 
     it('filters projects by search query', async () => {
       await setupLoggedIn();
-      const { createAudiotoolClient } = await getAudiotoolMock();
+      const { audiotool } = await getAudiotoolMock();
 
-      (createAudiotoolClient as ReturnType<typeof vi.fn>).mockResolvedValue({
-        api: {
-          projectService: {
+      (audiotool as ReturnType<typeof vi.fn>).mockResolvedValue(
+        createMockAuthenticatedClient({
+          projects: {
             listProjects: vi.fn().mockResolvedValue({
               projects: [
                 { name: 'projects/abc', displayName: 'My Song' },
@@ -259,9 +266,8 @@ describe('App component', () => {
             updateProject: vi.fn().mockResolvedValue({}),
             deleteProject: vi.fn().mockResolvedValue({}),
           },
-        },
-        createSyncedDocument: vi.fn(),
-      });
+        }),
+      );
 
       await act(async () => {
         render(<App />);
@@ -336,6 +342,149 @@ describe('App component', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Hello from the agent!')).toBeTruthy();
+      });
+    });
+
+    it('renders assistant markdown content (bold, list, inline code)', async () => {
+      const { runAgentStream } = await getApiMock();
+      (runAgentStream as ReturnType<typeof vi.fn>).mockImplementationOnce(
+        async (_baseUrl: string, _payload: any, onEvent: (e: any) => void) => {
+          onEvent({
+            type: 'reply',
+            data: { reply: '**Bold**\n\n- first item\n\nUse `cmd` now.' },
+          });
+        },
+      );
+
+      render(<App />);
+      dismissTutorial();
+
+      const chatInput = screen.getByPlaceholderText('Type your message...');
+      fireEvent.change(chatInput, { target: { value: 'Render markdown please' } });
+      const form = chatInput.closest('form')!;
+
+      await act(async () => {
+        fireEvent.submit(form);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('first item')).toBeTruthy();
+      });
+
+      expect(document.querySelector('.message-content strong')?.textContent).toBe('Bold');
+      expect(document.querySelector('.message-content code')?.textContent).toBe('cmd');
+    });
+
+    it('uses exportTokens for authenticated requests', async () => {
+      const status = await setupLoggedIn();
+      const { runAgentStream } = await getApiMock();
+
+      await act(async () => {
+        render(<App />);
+      });
+      dismissTutorial();
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('Check'));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Logged in')).toBeTruthy();
+      });
+
+      const chatInput = screen.getByPlaceholderText('Type your message...');
+      fireEvent.change(chatInput, { target: { value: 'Token handoff test' } });
+      const form = chatInput.closest('form')!;
+
+      await act(async () => {
+        fireEvent.submit(form);
+      });
+
+      await waitFor(() => {
+        expect(runAgentStream).toHaveBeenCalled();
+      });
+
+      expect(status.exportTokens).toHaveBeenCalledTimes(1);
+
+      const payload = (runAgentStream as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[1];
+      expect(payload.authTokens).toMatchObject({
+        accessToken: 'exported-access-token',
+        refreshToken: 'exported-refresh-token',
+        expiresAt: 1234567890000,
+      });
+      expect(typeof payload.authTokens.clientId).toBe('string');
+      expect(payload.authTokens.clientId.length).toBeGreaterThan(0);
+    });
+
+    it('does not send authTokens when unauthenticated', async () => {
+      await setupLoggedOut();
+      const { runAgentStream } = await getApiMock();
+
+      await act(async () => {
+        render(<App />);
+      });
+      dismissTutorial();
+
+      const chatInput = screen.getByPlaceholderText('Type your message...');
+      fireEvent.change(chatInput, { target: { value: 'No auth token test' } });
+      const form = chatInput.closest('form')!;
+
+      await act(async () => {
+        fireEvent.submit(form);
+      });
+
+      await waitFor(() => {
+        expect(runAgentStream).toHaveBeenCalled();
+      });
+
+      const payload = (runAgentStream as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[1];
+      expect(payload.authTokens).toBeUndefined();
+    });
+
+    it('forwards exportTokens payload exactly, including empty refreshToken', async () => {
+      const { audiotool } = await getAudiotoolMock();
+      const status = createMockAuthenticatedClient({
+        exportTokens: vi.fn().mockReturnValue({
+          accessToken: 'edge-access-token',
+          refreshToken: '',
+          expiresAt: 1234567890000,
+        }),
+      });
+      (audiotool as ReturnType<typeof vi.fn>).mockResolvedValue(status);
+
+      const { runAgentStream } = await getApiMock();
+
+      await act(async () => {
+        render(<App />);
+      });
+      dismissTutorial();
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('Check'));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Logged in')).toBeTruthy();
+      });
+
+      const chatInput = screen.getByPlaceholderText('Type your message...');
+      fireEvent.change(chatInput, { target: { value: 'Empty refresh token edge case' } });
+      const form = chatInput.closest('form')!;
+
+      await act(async () => {
+        fireEvent.submit(form);
+      });
+
+      await waitFor(() => {
+        expect(runAgentStream).toHaveBeenCalled();
+      });
+
+      const payload = (runAgentStream as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[1];
+      expect(status.exportTokens).toHaveBeenCalledTimes(1);
+      expect(payload.authTokens).toMatchObject({
+        accessToken: 'edge-access-token',
+        refreshToken: '',
+        expiresAt: 1234567890000,
       });
     });
 

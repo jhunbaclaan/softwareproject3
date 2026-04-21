@@ -9,9 +9,11 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@audiotool/nexus": "^0.0.12",
+    "@audiotool/nexus": "^0.0.14",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

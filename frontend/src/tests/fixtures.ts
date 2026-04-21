@@ -9,8 +9,6 @@ export const mockAuthTokens: AuthTokens = {
   expiresAt: Date.now() + 3600000,
   refreshToken: 'test-refresh-token-456',
   clientId: 'test-client-id',
-  redirectUrl: 'http://127.0.0.1:5173/',
-  scope: 'project:write sample:write',
 };
 
 export const mockProject = {
@@ -39,34 +37,32 @@ export const mockMusicResponse = {
 
 export function createMockAudiotoolClient() {
   return {
-    api: {
-      projectService: {
-        listProjects: vi.fn().mockResolvedValue({
-          projects: mockProjectList,
-          nextPageToken: '',
-        }),
-        createProject: vi.fn().mockResolvedValue({
-          name: 'projects/new-project-id',
-          displayName: 'New Project',
-        }),
-        updateProject: vi.fn().mockResolvedValue({}),
-        deleteProject: vi.fn().mockResolvedValue({}),
-      },
-      sampleService: {
-        createSample: vi.fn().mockResolvedValue({
-          sample: { name: 'sample_id_123' },
-          uploadEndpoint: { uploadUrl: 'http://fake-upload' },
-        }),
-        uploadSampleFinished: vi.fn().mockResolvedValue({}),
-        getSample: vi.fn().mockResolvedValue({
-          sample: { name: 'sample_id_123', wavUrl: 'fake.wav' },
-        }),
-      },
-      presets: {
-        get: vi.fn().mockResolvedValue({}),
-      },
+    projects: {
+      listProjects: vi.fn().mockResolvedValue({
+        projects: mockProjectList,
+        nextPageToken: '',
+      }),
+      createProject: vi.fn().mockResolvedValue({
+        name: 'projects/new-project-id',
+        displayName: 'New Project',
+      }),
+      updateProject: vi.fn().mockResolvedValue({}),
+      deleteProject: vi.fn().mockResolvedValue({}),
     },
-    createSyncedDocument: vi.fn().mockResolvedValue(createMockSyncedDocument()),
+    samples: {
+      createSample: vi.fn().mockResolvedValue({
+        sample: { name: 'sample_id_123' },
+        uploadEndpoint: { uploadUrl: 'http://fake-upload' },
+      }),
+      uploadSampleFinished: vi.fn().mockResolvedValue({}),
+      getSample: vi.fn().mockResolvedValue({
+        sample: { name: 'sample_id_123', wavUrl: 'fake.wav' },
+      }),
+    },
+    presets: {
+      get: vi.fn().mockResolvedValue({}),
+    },
+    open: vi.fn().mockResolvedValue(createMockSyncedDocument()),
   };
 }
 

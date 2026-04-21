@@ -68,8 +68,6 @@ async def test_full_agent_flow_with_mcp(mock_mcp_client):
                     "expiresAt": 9999999999999,
                     "refreshToken": "test_refresh_token",
                     "clientId": "test_client_id",
-                    "redirectUrl": "http://localhost:3000/callback",
-                    "scope": "project:write sample:write",
                 },
             }
 
@@ -145,8 +143,6 @@ async def test_session_persistence_client_reuse(mock_mcp_client):
                 "expiresAt": 9999999999999,
                 "refreshToken": "ref",
                 "clientId": "cid",
-                "redirectUrl": "http://localhost:3000/callback",
-                "scope": "project:write",
             },
         }
 

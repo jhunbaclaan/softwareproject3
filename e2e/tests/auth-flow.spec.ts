@@ -4,6 +4,7 @@ test.describe('Authentication Flow', () => {
   test.beforeEach(async ({ page }) => {
     // Dismiss the tutorial overlay that appears on every load
     await page.addInitScript(() => {
+      window.localStorage.setItem('tutorial.seen', 'true');
       window.localStorage.setItem('tutorialCompleted', 'true');
     });
   });

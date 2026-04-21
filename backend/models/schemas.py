@@ -12,10 +12,8 @@ class TraceItem(BaseModel):
 class AuthTokens(BaseModel):
     accessToken: str
     expiresAt: int
-    refreshToken: Optional[str] = None
+    refreshToken: str
     clientId: str
-    redirectUrl: str
-    scope: str
 
 
 class ConversationMessage(BaseModel):

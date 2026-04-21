@@ -4,6 +4,7 @@ test.describe('Settings', () => {
   test.beforeEach(async ({ page }) => {
     // Dismiss tutorial
     await page.addInitScript(() => {
+      window.localStorage.setItem('tutorial.seen', 'true');
       window.localStorage.setItem('tutorialCompleted', 'true');
     });
   });

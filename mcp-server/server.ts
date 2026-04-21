@@ -7,11 +7,16 @@ import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { getHeapStatistics } from "node:v8";
 import {
-  getLoginStatus,
+  audiotool,
+  type AudiotoolClient,
+  createServerAuth,
   createAudiotoolClient,
   SyncedDocument,
 } from "@audiotool/nexus";
-import { TokenManager } from "./token-manager.js";
+import {
+  createNodeTransport,
+  createDiskWasmLoader,
+} from "@audiotool/nexus/node";
 import {
   VALID_ENTITY_TYPES,
   ENTITY_TYPE_ALIASES,
@@ -61,11 +66,9 @@ function createMcpServer(): McpServer {
 // mode.  In HTTP mode, per-session servers are created via createMcpServer().
 let server: McpServer = createMcpServer();
 
-// client, document reference, and token manager
-let audiotoolClient: Awaited<ReturnType<typeof createAudiotoolClient>> | null =
-  null;
+// client and document reference
+let audiotoolClient: AudiotoolClient | null = null;
 let document: SyncedDocument | null = null;
-let tokenManager: TokenManager | null = null;
 
 // auto-layout counter so entities placed without coordinates don't stack
 let autoLayoutOffset = 0;
@@ -320,7 +323,6 @@ async function cleanupCurrentSession(): Promise<void> {
   logMemoryDiag("cleanup-start", {
     hasDocument: Boolean(document),
     hasClient: Boolean(audiotoolClient),
-    hasTokenManager: Boolean(tokenManager),
     hasDocumentDiagnostics: Boolean(documentEventCounters),
   });
   terminateDocumentEventDiagnostics();
@@ -350,7 +352,6 @@ async function cleanupCurrentSession(): Promise<void> {
     document = null;
   }
   audiotoolClient = null;
-  tokenManager = null;
   autoLayoutOffset = 0;
   logMemoryDiag("cleanup-complete");
 
@@ -377,19 +378,17 @@ async function cleanupCurrentSession(): Promise<void> {
 // helper for authenticated client
 async function getClient() {
   if (!audiotoolClient) {
-    const status = await getLoginStatus({
+    const at = await audiotool({
       clientId: process.env.AUDIOTOOL_CLIENT_ID || "",
       redirectUrl: process.env.AUDIOTOOL_REDIRECT_URL || "",
       scope: process.env.AUDIOTOOL_SCOPE || "",
     });
     // if not logged in, throws error
-    if (!status.loggedIn) {
+    if (at.status !== "authenticated") {
       throw new Error("User not logged in. Log into Audiotool first.");
     }
-    // create client if logged in
-    audiotoolClient = await createAudiotoolClient({
-      authorization: status,
-    });
+    // authenticated `audiotool(...)` result is the client itself
+    audiotoolClient = at;
   }
 
   return audiotoolClient;
@@ -419,6 +418,23 @@ async function getDocument(): Promise<SyncedDocument> {
 // client connects.  In stdio mode it runs once at startup.
 // ---------------------------------------------------------------------------
 
+/**
+ * Heuristic guard to confirm a field value on an entity is actually a
+ * routable socket before handing it to the Nexus SDK.
+ *
+ * Sockets we wire cables to are NexusObject<Empty>: they have a `.location`
+ * (the pointer target) and a `.fields` container, but no `.value` scalar.
+ * Ordinary primitive fields (display names, modulation depths, etc.) have
+ * `.value` and no `.fields`. Rejecting those here gives the agent an
+ * actionable error instead of a raw SDK "pointer to field that doesn't
+ * accept pointers" crash.
+ */
+export function isLikelySocket(field: unknown): boolean {
+  if (!field || typeof field !== "object") return false;
+  const f = field as Record<string, unknown>;
+  return "location" in f && "fields" in f && !("value" in f);
+}
+
 function registerTools(srv: McpServer): void {
 
 // initialize session with auth tokens and project
@@ -432,20 +448,16 @@ srv.registerTool(
       expiresAt: z
         .number()
         .describe("Token expiration timestamp in milliseconds"),
-      refreshToken: z.string().optional().describe("OIDC refresh token"),
+      refreshToken: z.string().describe("OIDC refresh token"),
       clientId: z.string().describe("Audiotool OAuth client ID"),
-      redirectUrl: z.string().describe("OAuth redirect URL"),
-      scope: z.string().describe("OAuth scope"),
       projectUrl: z.string().describe("URL/ID of the Audiotool project to use"),
     }),
   },
   async (args: {
     accessToken: string;
     expiresAt: number;
-    refreshToken?: string;
+    refreshToken: string;
     clientId: string;
-    redirectUrl: string;
-    scope: string;
     projectUrl: string;
   }) => {
     try {
@@ -462,15 +474,11 @@ srv.registerTool(
         expiresAt,
         refreshToken,
         clientId,
-        redirectUrl,
-        scope,
         projectUrl,
       } = args;
 
       console.error("[initialize-session] Received args:", {
         clientId,
-        redirectUrl,
-        scope,
         projectUrl,
         hasAccessToken: !!accessToken,
         accessTokenLength: accessToken?.length,
@@ -478,24 +486,23 @@ srv.registerTool(
         hasRefreshToken: !!refreshToken,
       });
 
-      // Create TokenManager for automatic token refresh
-      console.error(
-        "[initialize-session] Creating TokenManager for automatic token refresh...",
-      );
-      tokenManager = new TokenManager({
-        accessToken,
-        expiresAt,
-        refreshToken,
-        clientId,
-      });
+      const normalizedRefreshToken = refreshToken.trim();
+      if (!normalizedRefreshToken) {
+        throw new Error("Missing refreshToken; initialize-session requires exported browser tokens");
+      }
 
-      // Use TokenManager with getToken() method for authorization
-      // This allows the client to automatically refresh tokens as needed
       console.error(
-        "[initialize-session] Creating Audiotool client with TokenManager...",
+        "[initialize-session] Creating Audiotool client with createServerAuth...",
       );
       audiotoolClient = await createAudiotoolClient({
-        authorization: tokenManager,
+        auth: createServerAuth({
+          accessToken,
+          refreshToken: normalizedRefreshToken,
+          expiresAt,
+          clientId,
+        }),
+        transport: createNodeTransport(),
+        wasm: createDiskWasmLoader(),
       });
       console.error("[initialize-session] Client created successfully!");
       logMemoryDiag("initialize-after-client");
@@ -505,9 +512,7 @@ srv.registerTool(
         "[initialize-session] Creating synced document for project:",
         projectUrl,
       );
-      document = await audiotoolClient.createSyncedDocument({
-        project: projectUrl,
-      });
+      document = await audiotoolClient.open(projectUrl);
       setupDocumentEventDiagnostics(document);
       console.error("[initialize-session] Document created, starting sync...");
       logMemoryDiag("initialize-after-document-created");
@@ -599,9 +604,7 @@ srv.registerTool(
 
       const client = await getClient();
 
-      document = await client.createSyncedDocument({
-        project: projectURL || "",
-      });
+      document = await client.open(projectURL || "");
       await document.start();
 
       console.error(`[open-document] Document opened successfully`);
@@ -925,7 +928,7 @@ srv.registerTool(
           );
           if (presetUuid) {
             const client = await getClient();
-            gakkiPreset = await client.api.presets.get(`presets/${presetUuid}`);
+            gakkiPreset = await client.presets.get(`presets/${presetUuid}`);
             console.error(`[add-abc-track] fetched gakki preset for uuid=${presetUuid}, preset loaded=${gakkiPreset != null}`);
           } else {
             console.error(`[add-abc-track] WARNING: no gakki preset resolved — instrument will use default sound`);
@@ -1492,22 +1495,51 @@ srv.registerTool(
             if (!targetEntity) return { error: `Target entity ${targetEntityId} not found` };
 
             const sourceSocket = (sourceEntity.fields as any)[sourceField];
-            if (!sourceSocket || !sourceSocket.location) {
-              return { error: `Field '${sourceField}' missing or not a socket on entity ${sourceEntityId}` };
+            if (!sourceSocket) {
+              return { error: `Field '${sourceField}' does not exist on entity ${sourceEntityId}` };
+            }
+            if (!isLikelySocket(sourceSocket)) {
+              const sourceType = (sourceEntity as any).type ?? "unknown";
+              return {
+                error:
+                  `Field '${sourceField}' on entity ${sourceEntityId} (type: ${sourceType}) is not a valid audio/note socket. ` +
+                  `Use inspect-entity to list the real socket names (e.g. a synth exposes 'audioOutput', a mixer channel exposes 'audioInput').`,
+              };
             }
 
             const targetSocket = (targetEntity.fields as any)[targetField];
-            if (!targetSocket || !targetSocket.location) {
-              return { error: `Field '${targetField}' missing or not a socket on entity ${targetEntityId}` };
+            if (!targetSocket) {
+              return { error: `Field '${targetField}' does not exist on entity ${targetEntityId}` };
+            }
+            if (!isLikelySocket(targetSocket)) {
+              const targetType = (targetEntity as any).type ?? "unknown";
+              return {
+                error:
+                  `Field '${targetField}' on entity ${targetEntityId} (type: ${targetType}) is not a valid audio/note socket. ` +
+                  `Use inspect-entity to list the real socket names (e.g. mixerChannel uses 'audioInput', mixerAux uses 'insertInput').`,
+              };
             }
 
+            // De-duplicate: if this audio/note input already has an incoming cable,
+            // remove the old cable(s) before creating the new one. `toSocket` is a
+            // PrimitiveField<NexusLocation> — `.location` points at the pointer field
+            // itself, `.value` points at the socket the cable terminates at. We must
+            // compare `.value` to `targetSocket.location`.
             const targetLocKey = String(targetSocket.location);
             if (!socketsWiredInThisBatch.has(targetLocKey)) {
-              const existingCables = t.entities.ofTypes("desktopAudioCable" as any, "desktopNoteCable" as any).get();
+              const existingCables = t.entities
+                .ofTypes("desktopAudioCable" as any, "desktopNoteCable" as any)
+                .get();
               for (const cable of existingCables) {
                 const toSock = (cable.fields as any).toSocket;
-                if (toSock?.location && targetSocket.location) {
-                  if (toSock.location.equals?.(targetSocket.location) || String(toSock.location) === targetLocKey) {
+                const pointed = toSock?.value as
+                  | { equals?: (o: any) => boolean }
+                  | undefined;
+                if (pointed && targetSocket.location) {
+                  if (
+                    pointed.equals?.(targetSocket.location) ||
+                    String(pointed) === targetLocKey
+                  ) {
                     t.remove(cable.id);
                   }
                 }
@@ -1581,10 +1613,18 @@ srv.registerTool(
 
       const modifyResult = await doc.modify((t) => {
         try {
+          const removed: string[] = [];
+          const missing: string[] = [];
           for (const id of idsToRemove) {
+            const cable = t.entities.getEntity(id);
+            if (!cable) {
+              missing.push(id);
+              continue;
+            }
             t.remove(id);
+            removed.push(id);
           }
-          return { ok: true };
+          return { ok: true, removed, missing };
         } catch (innerError) {
           return { error: innerError instanceof Error ? innerError.message : String(innerError) };
         }
@@ -1594,15 +1634,21 @@ srv.registerTool(
         throw new Error(modifyResult.error as string);
       }
 
-      if (idsToRemove.length === 1) {
-        return {
-          content: [{ type: "text", text: `Successfully disconnected cable ${idsToRemove[0]}` }],
-        };
+      const removed = (modifyResult as any).removed as string[];
+      const missing = (modifyResult as any).missing as string[];
+
+      let text: string;
+      if (removed.length === 1 && missing.length === 0) {
+        text = `Successfully disconnected cable ${removed[0]}`;
+      } else {
+        text =
+          `Disconnected ${removed.length} cable(s).` +
+          (missing.length
+            ? ` Skipped ${missing.length} already-removed id(s): ${missing.join(", ")}.`
+            : "");
       }
 
-      return {
-        content: [{ type: "text", text: `Successfully disconnected ${idsToRemove.length} cables.` }],
-      };
+      return { content: [{ type: "text", text }] };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       return {
@@ -2081,6 +2127,179 @@ srv.registerTool(
       console.error(`[export-tracks-abc] ERROR:`, errorMsg);
       return {
         content: [{ type: "text", text: `Failed to export tracks: ${errorMsg}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+// Device types that support presets (keys of PRESET_TARGET_RELATIVE_TYPES
+// whose value is not `undefined`).  Kept as a literal tuple so the Zod enum
+// types line up with the SDK's DevicePresetEntityType at compile time.
+const PRESET_SUPPORTED_DEVICE_TYPES = [
+  "heisenberg",
+  "bassline",
+  "pulverisateur",
+  "space",
+  "tonematrix",
+  "machiniste",
+  "beatbox8",
+  "beatbox9",
+  "quasar",
+  "rasselbock",
+  "pulsar",
+  "quantum",
+  "matrixArpeggiator",
+  "noteSplitter",
+  "gakki",
+  "curve",
+  "graphicalEQ",
+  "gravity",
+  "autoFilter",
+  "waveshaper",
+  "helmholtz",
+  "stereoEnhancer",
+  "exciter",
+  "panorama",
+  "crossfader",
+  "bandSplitter",
+  "stompboxChorus",
+  "stompboxCompressor",
+  "stompboxCrusher",
+  "stompboxDelay",
+  "stompboxFlanger",
+  "stompboxGate",
+  "stompboxParametricEqualizer",
+  "stompboxPhaser",
+  "stompboxPitchDelay",
+  "stompboxReverb",
+  "stompboxSlope",
+  "stompboxStereoDetune",
+  "stompboxTube",
+] as const;
+
+// list-presets tool
+srv.registerTool(
+  "list-presets",
+  {
+    description: [
+      "List available factory/user presets for a given device type.",
+      "Use this before apply-preset to find a preset id matching the user's mood",
+      "(e.g. 'wide lead', 'fat bass', 'dark pad'). Returns at most 20 results.",
+    ].join("\n"),
+    inputSchema: z.object({
+      deviceType: z
+        .enum(PRESET_SUPPORTED_DEVICE_TYPES)
+        .describe(
+          "Entity type that supports presets (heisenberg, bassline, stompboxReverb, ...).",
+        ),
+      textSearch: z
+        .string()
+        .optional()
+        .describe(
+          "Optional text filter, matched against preset name/description (e.g. 'lead', 'wide', 'bass').",
+        ),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(50)
+        .optional()
+        .describe("Max results (default 20)."),
+    }),
+  },
+  async (args: {
+    deviceType: (typeof PRESET_SUPPORTED_DEVICE_TYPES)[number];
+    textSearch?: string;
+    limit?: number;
+  }) => {
+    try {
+      const client = await getClient();
+      const raw = await client.presets.list(
+        args.deviceType as any,
+        args.textSearch,
+      );
+      const capped = raw.slice(0, args.limit ?? 20);
+      const trimmed = capped.map((p: any) => ({
+        id: p?.meta?.id ?? p?.meta?.name ?? "",
+        name: p?.meta?.name ?? "",
+        description: p?.meta?.description ?? "",
+      }));
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                deviceType: args.deviceType,
+                count: trimmed.length,
+                presets: trimmed,
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{ type: "text", text: `Failed to list presets: ${msg}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+// apply-preset tool
+srv.registerTool(
+  "apply-preset",
+  {
+    description: [
+      "Apply a preset (by id) to an existing entity. The entity type must match the preset's device type.",
+      "Use after list-presets to pick a preset id. Supports uuid or 'presets/{uuid}' form.",
+    ].join("\n"),
+    inputSchema: z.object({
+      entityID: z.string().describe("ID of the target device entity."),
+      presetID: z
+        .string()
+        .describe("Preset id - either a uuid or 'presets/{uuid}'."),
+    }),
+  },
+  async (args: { entityID: string; presetID: string }) => {
+    try {
+      const client = await getClient();
+      const doc = await getDocument();
+      const preset = await client.presets.get(args.presetID);
+      const result = await doc.modify((t) => {
+        const entity = t.entities.getEntity(args.entityID);
+        if (!entity)
+          return { error: `Entity with ID ${args.entityID} not found` };
+        try {
+          (t as any).applyPresetTo(entity, preset);
+        } catch (innerError) {
+          return {
+            error:
+              innerError instanceof Error
+                ? innerError.message
+                : String(innerError),
+          };
+        }
+        return { ok: true };
+      });
+      if ("error" in result) throw new Error(result.error as string);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Applied preset ${args.presetID} to entity ${args.entityID}.`,
+          },
+        ],
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{ type: "text", text: `Failed to apply preset: ${msg}` }],
         isError: true,
       };
     }

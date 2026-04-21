@@ -52,9 +52,8 @@ describe('Frontend API wrapper tests', () => {
       authTokens: {
         accessToken: 'tok-123',
         expiresAt: 9999999999,
+        refreshToken: 'refresh-123',
         clientId: 'client-1',
-        redirectUrl: 'http://localhost/',
-        scope: 'project:write',
       },
       projectUrl: 'projects/abc',
     };
@@ -99,4 +98,3 @@ describe('Frontend API wrapper tests', () => {
     ).rejects.toThrow('Agent run failed (503)');
   });
 });
-

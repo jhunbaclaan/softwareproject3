@@ -8,18 +8,16 @@ describe('importGeneratedAudio tests', () => {
 
   function createFakeClient(overrides: Record<string, any> = {}) {
     return {
-      api: {
-        sampleService: {
-          createSample: vi.fn().mockResolvedValue({
-            sample: { name: 'sample_id_123' },
-            uploadEndpoint: { uploadUrl: 'http://fake-upload' }
-          }),
-          uploadSampleFinished: vi.fn().mockResolvedValue({}),
-          getSample: vi.fn().mockResolvedValue({
-            sample: { name: 'sample_id_123', wavUrl: 'fake.wav' }
-          }),
-          ...overrides,
-        }
+      samples: {
+        createSample: vi.fn().mockResolvedValue({
+          sample: { name: 'sample_id_123' },
+          uploadEndpoint: { uploadUrl: 'http://fake-upload' }
+        }),
+        uploadSampleFinished: vi.fn().mockResolvedValue({}),
+        getSample: vi.fn().mockResolvedValue({
+          sample: { name: 'sample_id_123', wavUrl: 'fake.wav' }
+        }),
+        ...overrides,
       }
     };
   }
@@ -78,8 +76,8 @@ describe('importGeneratedAudio tests', () => {
       durationMs: 5000,
     });
 
-    expect(fakeClient.api.sampleService.createSample).toHaveBeenCalled();
-    expect(fakeClient.api.sampleService.uploadSampleFinished).toHaveBeenCalledWith({ name: 'sample_id_123' });
+    expect(fakeClient.samples.createSample).toHaveBeenCalled();
+    expect(fakeClient.samples.uploadSampleFinished).toHaveBeenCalledWith({ name: 'sample_id_123' });
     expect(fakeDoc.modify).toHaveBeenCalled();
     expect(fetch).toHaveBeenCalledWith('http://fake-upload', expect.objectContaining({ method: 'PUT' }));
   });

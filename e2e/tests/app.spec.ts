@@ -4,6 +4,7 @@ test.describe('Nexus Agent App', () => {
   test.beforeEach(async ({ page }) => {
     // Dismiss tutorial via localStorage before page loads
     await page.addInitScript(() => {
+      window.localStorage.setItem('tutorial.seen', 'true');
       window.localStorage.setItem('tutorialCompleted', 'true');
     });
     await page.goto('/');

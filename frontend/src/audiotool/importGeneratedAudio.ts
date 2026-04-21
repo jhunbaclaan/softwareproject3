@@ -106,7 +106,7 @@ async function createSampleWithFallbacks(
   for (let i = 0; i < candidates.length; i++) {
     const { label, request } = candidates[i];
     console.log(`[createSample] Trying candidate ${i} (${label})…`);
-    const result = await client.api.sampleService.createSample(request as any);
+    const result = await client.samples.createSample(request as any);
 
     if (!isGrpcErrorResult(result)) {
       const sample = result.sample;
@@ -220,7 +220,7 @@ export async function importAudioBlobToProject(
     throw new Error(`Sample upload failed: HTTP ${putRes.status} ${putRes.statusText}`);
   }
 
-  const finRes = await client.api.sampleService.uploadSampleFinished({
+  const finRes = await client.samples.uploadSampleFinished({
     name: apiSample.name,
   });
   if (isGrpcErrorResult(finRes)) {
@@ -229,7 +229,7 @@ export async function importAudioBlobToProject(
 
   let playSeconds = Math.max(0.5, options.durationMs / 1000);
   for (let i = 0; i < 90; i++) {
-    const gs = await client.api.sampleService.getSample({ name: apiSample.name });
+    const gs = await client.samples.getSample({ name: apiSample.name });
     if (!isGrpcErrorResult(gs) && gs.sample) {
       const fromProto = durationSecondsFromProtobuf(gs.sample.playDuration as any);
       if (fromProto > 0.1) {

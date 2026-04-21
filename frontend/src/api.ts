@@ -3,10 +3,8 @@ export type HealthStatus = { status: string };
 export type AuthTokens = {
   accessToken: string;
   expiresAt: number;
-  refreshToken?: string;
+  refreshToken: string;
   clientId: string;
-  redirectUrl: string;
-  scope: string;
 };
 
 export type ConversationMessage = {

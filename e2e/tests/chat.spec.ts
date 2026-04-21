@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Nexus Agent Chat Interface', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
+      window.localStorage.setItem('tutorial.seen', 'true');
       window.localStorage.setItem('tutorialCompleted', 'true');
     });
   });
