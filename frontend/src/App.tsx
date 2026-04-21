@@ -190,7 +190,36 @@ const deriveChatTitle = (messages: Pick<Message, 'role' | 'content'>[]): string 
   return `Chat ${new Date().toLocaleString()}`;
 };
 
-const formatError = (error: unknown) => (error instanceof Error ? error.message : String(error));
+const formatError = (error: unknown): string => {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+  const parts: string[] = [];
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  while (current instanceof Error && !seen.has(current)) {
+    seen.add(current);
+    const message = current.message?.trim();
+    if (message && !parts.includes(message)) {
+      parts.push(message);
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  if (current && !(current instanceof Error)) {
+    const tail = typeof current === 'string' ? current : (() => {
+      try {
+        return JSON.stringify(current);
+      } catch {
+        return String(current);
+      }
+    })();
+    const trimmed = tail.trim();
+    if (trimmed && !parts.includes(trimmed)) {
+      parts.push(trimmed);
+    }
+  }
+  return parts.length > 0 ? parts.join(': ') : error.message || String(error);
+};
 const clampSidebarWidth = (width: number) =>
   Math.min(maxSidebarWidth, Math.max(minSidebarWidth, width));
 
@@ -1370,48 +1399,6 @@ export default function App() {
     }
   };
 
-  const handleDeleteProject = async (project: ProjectItem) => {
-    if (!client) {
-      return;
-    }
-    const ok = window.confirm(
-      `Delete project "${project.displayName}"? This cannot be undone.`,
-    );
-    if (!ok) {
-      return;
-    }
-    setProjectManageError(null);
-    try {
-      const deletingConnectedProject = connectedProjectName === project.name;
-      if (syncedDocument && deletingConnectedProject) {
-        try {
-          await syncedDocument.stop();
-        } catch {
-          /* ignore stop errors; attempt delete anyway */
-        }
-        setSyncedDocument(null);
-        setProjectStatus('idle');
-        setConnectedProjectName(null);
-      }
-
-      const response = await client.api.projectService.deleteProject({
-        name: project.name,
-      });
-      if (response instanceof Error) {
-        throw response;
-      }
-      if (projectUrl.trim() === getStudioUrl(project.name)) {
-        setProjectUrl('');
-      }
-      setProjectList((prev) => prev.filter((p) => p.name !== project.name));
-      if (renamingProjectName === project.name) {
-        cancelRenameProject();
-      }
-    } catch (error) {
-      setProjectManageError(formatError(error));
-    }
-  };
-
   const handleSidebarResizeStart = (event: React.PointerEvent<HTMLDivElement>) => {
     if (window.innerWidth <= 768) {
       return;
@@ -1653,14 +1640,6 @@ export default function App() {
                                       disabled={projectStatus === 'connecting'}
                                     >
                                       Rename
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="ghost tiny project-delete-btn"
-                                      onClick={() => void handleDeleteProject(project)}
-                                      disabled={projectStatus === 'connecting'}
-                                    >
-                                      Delete
                                     </button>
                                     <a
                                       href={getStudioUrl(project.name)}
