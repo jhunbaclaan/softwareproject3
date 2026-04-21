@@ -301,6 +301,7 @@ export default function App() {
   const [isRunning, setIsRunning] = useState(false);
   const isRunningRef = useRef(false);
   const streamAbortRef = useRef<AbortController | null>(null);
+  const chatTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const authConfig = {
     clientId: envClientId ?? '',
     redirectUrl: envRedirectUrl ?? defaultRedirectUrl,
@@ -1004,6 +1005,9 @@ export default function App() {
     setIsRunning(true);
     addMessage('user', trimmed);
     setInput('');
+    if (chatTextareaRef.current) {
+      chatTextareaRef.current.style.height = 'auto';
+    }
 
     let assistantIdForRun: string | undefined;
     try {
@@ -1954,11 +1958,24 @@ export default function App() {
                 handleSend();
               }}
             >
-              <input
+              <textarea
+                ref={chatTextareaRef}
                 value={input}
-                onChange={(event) => setInput(event.target.value)}
+                onChange={(event) => {
+                  setInput(event.target.value);
+                  const el = event.target;
+                  el.style.height = 'auto';
+                  el.style.height = `${el.scrollHeight}px`;
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    handleSend();
+                  }
+                }}
                 placeholder="Type your message..."
                 aria-label="Chat message"
+                rows={1}
               />
               <button type="submit" disabled={!input.trim() || isRunning}>
                 {isRunning ? 'Sending...' : 'Send'}
@@ -2210,7 +2227,7 @@ export default function App() {
                     className="theme-select"
                     aria-label="LLM provider"
                   >
-                    <option value="gemini">Gemini (Google)</option>
+                    <option value="gemini">Google (Gemini)</option>
                     <option value="anthropic">Anthropic (Claude)</option>
                     <option value="openai">OpenAI (GPT)</option>
                   </select>
