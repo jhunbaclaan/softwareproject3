@@ -1618,8 +1618,30 @@ input[type="number"] {
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 10px;
-    align-items: center;
+    align-items: end;
     flex-shrink: 0;
+}
+
+.composer textarea {
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 1rem;
+    background: var(--surface-alt);
+    color: var(--ink);
+    resize: none;
+    overflow-y: hidden;
+    min-height: 42px;
+    max-height: 200px;
+    line-height: 1.4;
+    box-sizing: border-box;
+}
+
+.composer textarea:focus {
+    outline: 2px solid rgba(27, 127, 121, 0.2);
+    border-color: var(--accent);
 }
 
 /* ── Buttons ──────────────────────────────────── */
