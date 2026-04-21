@@ -13,8 +13,6 @@ def sample_auth_tokens() -> AuthTokens:
         expiresAt=9999999999999,  # Far future
         refreshToken="test_refresh_token_67890",
         clientId="test_client_id",
-        redirectUrl="http://localhost:3000/callback",
-        scope="project:write sample:write"
     )
 
 

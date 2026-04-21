@@ -39,6 +39,6 @@ Do **not** commit secrets. **`.env`** is gitignored; use local env files per tea
 
 This project is deployed on **DigitalOcean App Platform**.
 
-- When performing deployment-related tasks (checking app status, viewing build/run logs, updating the app spec, or managing the live environment), use the **DigitalOcean MCP** tools available in Claude Code.
+- When performing deployment-related tasks (checking app status, viewing build/run logs, updating the app spec, or managing the live environment), use the **DigitalOcean MCP** tools available.
 - Prefer MCP tool calls over manual `doctl` CLI commands when the MCP is available in the session.
 - Do **not** commit infrastructure changes (app specs, secrets) without confirming with the user first.

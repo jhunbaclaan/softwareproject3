@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  createAudiotoolClient,
-  getLoginStatus,
+  audiotool,
   type AudiotoolClient,
-  type LoginStatus,
   type SyncedDocument,
 } from '@audiotool/nexus';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import './App.css';
-import { cancelAgentRun, getApiBaseUrl, runAgentStream, type AuthTokens, type ConversationMessage, type LLMProvider, type TraceItem, type DawContext } from './api';
+import { cancelAgentRun, getApiBaseUrl, runAgentStream, type ConversationMessage, type LLMProvider, type TraceItem, type DawContext } from './api';
 import { importAudioBlobToProject } from './audiotool/importGeneratedAudio';
 
 type Role = 'user' | 'assistant';
@@ -85,6 +85,7 @@ type StoredMessage = {
 };
 
 type StoredChat = ChatIndexEntry & { messages: StoredMessage[] };
+type AudiotoolAuth = Awaited<ReturnType<typeof audiotool>>;
 
 const chatHistoryIndexKey = 'chatHistory.index';
 const chatHistoryCurrentKey = 'chatHistory.currentId';
@@ -226,37 +227,6 @@ function parseAudiotoolProjectRef(raw: string): { resourceName: string; studioUr
   }
 }
 
-const extractAuthTokens = (clientId: string, redirectUrl: string, scope: string): AuthTokens | null => {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  const accessToken = window.localStorage.getItem(`oidc_${clientId}_oidc_access_token`);
-  const expiresAtStr = window.localStorage.getItem(`oidc_${clientId}_oidc_expires_at`);
-  const refreshToken = window.localStorage.getItem(`oidc_${clientId}_oidc_refresh_token`);
-
-  if (!accessToken || !expiresAtStr) {
-    return null;
-  }
-
-  const validRefreshToken =
-    refreshToken &&
-      refreshToken !== 'undefined' &&
-      refreshToken !== 'null' &&
-      refreshToken.trim() !== ''
-      ? refreshToken
-      : undefined;
-
-  return {
-    accessToken,
-    expiresAt: parseInt(expiresAtStr, 10),
-    refreshToken: validRefreshToken,
-    clientId,
-    redirectUrl,
-    scope,
-  };
-};
-
 const INSTRUMENT_ENTITY_TYPES = new Set([
   'heisenberg', 'bassline', 'space', 'gakki', 'pulverisateur',
   'tonematrix', 'machiniste', 'matrixArpeggiator', 'pulsar',
@@ -307,7 +277,7 @@ export default function App() {
     redirectUrl: envRedirectUrl ?? defaultRedirectUrl,
     scope: envScope ?? 'project:write sample:write',
   };
-  const [authStatus, setAuthStatus] = useState<LoginStatus | null>(null);
+  const [authStatus, setAuthStatus] = useState<AudiotoolAuth | null>(null);
   const [authUser, setAuthUser] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(false);
@@ -780,7 +750,7 @@ export default function App() {
     setProjectListLoading(true);
     setProjectListError(null);
     try {
-      const response = await currentClient.api.projectService.listProjects({
+      const response = await currentClient.projects.listProjects({
         pageSize: 20,
         pageToken: append ? token : '',
       });
@@ -824,24 +794,22 @@ export default function App() {
     setIsCheckingAuth(true);
     setAuthError(null);
     try {
-      const status = await getLoginStatus({
+      const status = await audiotool({
         clientId: authConfig.clientId.trim(),
         redirectUrl: authConfig.redirectUrl.trim(),
         scope: authConfig.scope.trim(),
       });
       setAuthStatus(status);
 
-      if (status.loggedIn) {
-        const userName = await status.getUserName();
-        setAuthUser(userName instanceof Error ? null : userName);
-        const nextClient = await createAudiotoolClient({ authorization: status });
-        setClient(nextClient);
+      if (status.status === 'authenticated') {
+        setAuthUser(status.userName ?? null);
+        setClient(status);
       } else {
         setAuthUser(null);
         setClient(null);
         setSyncedDocument(null);
         setProjectStatus('idle');
-        if (status.error) {
+        if ('error' in status && status.error) {
           setAuthError(status.error.message);
         }
       }
@@ -860,13 +828,13 @@ export default function App() {
 
   const handleLogin = async () => {
     const status = authStatus ?? (await fetchLoginStatus());
-    if (status && !status.loggedIn) {
+    if (status && status.status === 'unauthenticated') {
       await status.login();
     }
   };
 
   const handleLogout = () => {
-    if (authStatus && authStatus.loggedIn) {
+    if (authStatus && authStatus.status === 'authenticated') {
       authStatus.logout();
     }
   };
@@ -893,9 +861,7 @@ export default function App() {
       if (syncedDocument) {
         await syncedDocument.stop();
       }
-      const doc = await client.createSyncedDocument({
-        project: studioUrl,
-      });
+      const doc = await client.open(studioUrl);
       await doc.start();
       setSyncedDocument(doc);
       setProjectStatus('connected');
@@ -942,7 +908,7 @@ export default function App() {
     setIsCreatingProject(true);
     setCreateProjectError(null);
     try {
-      const response = await client.api.projectService.createProject({
+      const response = await client.projects.createProject({
         project: {},
       });
       if (response instanceof Error) {
@@ -1012,12 +978,11 @@ export default function App() {
 
     let assistantIdForRun: string | undefined;
     try {
-      const authTokens = authStatus?.loggedIn
-        ? extractAuthTokens(
-          authConfig.clientId.trim(),
-          authConfig.redirectUrl.trim(),
-          authConfig.scope.trim()
-        )
+      const authTokens = authStatus?.status === 'authenticated'
+        ? {
+          ...authStatus.exportTokens(),
+          clientId: authConfig.clientId.trim(),
+        }
         : null;
 
       const projectUrlToSend = projectStatus === 'connected' && projectUrl.trim()
@@ -1293,7 +1258,7 @@ export default function App() {
     return new Date(ms).toLocaleDateString();
   };
 
-  const authPillClass = `status-pill ${authStatus?.loggedIn ? 'ok' : 'warn'}`;
+  const authPillClass = `status-pill ${authStatus?.status === 'authenticated' ? 'ok' : 'warn'}`;
   const projectPillClass = `status-pill ${projectStatus === 'connected' ? 'ok' : 'warn'}`;
   const projectLabel =
     projectStatus === 'connected'
@@ -1351,7 +1316,7 @@ export default function App() {
     setRenameSavingFor(renamingProjectName);
     setProjectManageError(null);
     try {
-      const response = await client.api.projectService.updateProject({
+      const response = await client.projects.updateProject({
         project: { name: renamingProjectName, displayName: trimmed },
         updateMask: { paths: ['display_name'] },
       });
@@ -1394,7 +1359,7 @@ export default function App() {
         setConnectedProjectName(null);
       }
 
-      const response = await client.api.projectService.deleteProject({
+      const response = await client.projects.deleteProject({
         name: project.name,
       });
       if (response instanceof Error) {
@@ -1466,9 +1431,9 @@ export default function App() {
           <div className="sidebar-auth">
             <div className="sidebar-auth-status">
               <span className={authPillClass}>
-                {authStatus?.loggedIn ? 'Logged in' : 'Logged out'}
+                {authStatus?.status === 'authenticated' ? 'Logged in' : 'Logged out'}
               </span>
-              {authStatus?.loggedIn && authUser && (
+              {authStatus?.status === 'authenticated' && authUser && (
                 <span className="sidebar-user">{authUser}</span>
               )}
             </div>
@@ -1476,7 +1441,7 @@ export default function App() {
               <button type="button" className="ghost small" onClick={fetchLoginStatus} disabled={isCheckingAuth}>
                 {isCheckingAuth ? 'Checking...' : 'Check'}
               </button>
-              {authStatus?.loggedIn ? (
+              {authStatus?.status === 'authenticated' ? (
                 <button type="button" className="small" onClick={handleLogout}>
                   Logout
                 </button>
@@ -1932,7 +1897,17 @@ export default function App() {
                         ))}
                       </div>
                     )}
-                    <p style={{ whiteSpace: 'pre-wrap' }}>{message.content || (message.role === 'assistant' && !message.traces?.length ? 'Thinking...' : '')}</p>
+                    {message.content ? (
+                      <div className="message-content">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {message.content}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      <p className="message-content">
+                        {message.role === 'assistant' && !message.traces?.length ? 'Thinking...' : ''}
+                      </p>
+                    )}
                   </div>
                 ))
               )}

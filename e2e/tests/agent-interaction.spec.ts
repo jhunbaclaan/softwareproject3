@@ -16,6 +16,7 @@ test.describe('Agent Interaction', () => {
   test.beforeEach(async ({ page }) => {
     // Dismiss tutorial
     await page.addInitScript(() => {
+      window.localStorage.setItem('tutorial.seen', 'true');
       window.localStorage.setItem('tutorialCompleted', 'true');
     });
   });

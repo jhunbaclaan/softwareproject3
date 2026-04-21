@@ -49,9 +49,8 @@ async def test_initialize_session_with_tokens():
         access_token="test_token",
         expires_at=9999999999,
         client_id="test_client",
-        redirect_url="http://localhost",
-        scope="project:write",
-        project_url="http://test-project"
+        project_url="http://test-project",
+        refresh_token="test_refresh",
     )
 
     assert "Session initialized" in result
@@ -272,23 +271,146 @@ async def test_execute_generate_music_coerces_and_formats_errors():
         assert "bad prompt" in text
 
 
+@pytest.mark.asyncio
+async def test_run_scoped_tool_loop_anthropic_filters_allowlist():
+    client = MCPClient(llm_provider="anthropic")
+    client._get_anthropic_tools = AsyncMock(
+        return_value=[
+            {"name": "add-abc-track"},
+            {"name": "get-project-summary"},
+        ]
+    )
+    client.run_tool_loop_anthropic = AsyncMock(return_value=([], "anthropic-ok", None))
+
+    reply = await client.run_scoped_tool_loop(
+        user_message="write a melody",
+        system_instruction="scoped-system",
+        tool_allowlist={"add-abc-track"},
+    )
+
+    assert reply == "anthropic-ok"
+    client.run_tool_loop_anthropic.assert_awaited_once()
+    call = client.run_tool_loop_anthropic.await_args
+    assert call.args[0] == [{"role": "user", "content": "write a melody"}]
+    assert call.kwargs["system"] == "scoped-system"
+    assert call.kwargs["tools"] == [{"name": "add-abc-track"}]
+
+
+@pytest.mark.asyncio
+async def test_run_scoped_tool_loop_anthropic_raises_when_no_allowlisted_tool():
+    client = MCPClient(llm_provider="anthropic")
+    client._get_anthropic_tools = AsyncMock(return_value=[{"name": "inspect-entity"}])
+
+    with pytest.raises(RuntimeError, match="No tools in allowlist"):
+        await client.run_scoped_tool_loop(
+            user_message="write a melody",
+            system_instruction="scoped-system",
+            tool_allowlist={"add-abc-track"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_run_scoped_tool_loop_openai_filters_allowlist():
+    client = MCPClient(llm_provider="openai")
+    client._get_openai_tools = AsyncMock(
+        return_value=[
+            {"type": "function", "function": {"name": "add-abc-track"}},
+            {"type": "function", "function": {"name": "get-project-summary"}},
+        ]
+    )
+    client.run_tool_loop_openai = AsyncMock(return_value=([], "openai-ok", None))
+
+    reply = await client.run_scoped_tool_loop(
+        user_message="write bassline",
+        system_instruction="scoped-system",
+        tool_allowlist={"get-project-summary"},
+    )
+
+    assert reply == "openai-ok"
+    client.run_tool_loop_openai.assert_awaited_once()
+    call = client.run_tool_loop_openai.await_args
+    assert call.args[0] == [{"role": "user", "content": "write bassline"}]
+    assert call.kwargs["system"] == "scoped-system"
+    assert call.kwargs["tools"] == [
+        {"type": "function", "function": {"name": "get-project-summary"}}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_run_scoped_tool_loop_openai_raises_when_no_allowlisted_tool():
+    client = MCPClient(llm_provider="openai")
+    client._get_openai_tools = AsyncMock(
+        return_value=[{"type": "function", "function": {"name": "inspect-entity"}}]
+    )
+
+    with pytest.raises(RuntimeError, match="No tools in allowlist"):
+        await client.run_scoped_tool_loop(
+            user_message="x",
+            system_instruction="y",
+            tool_allowlist={"add-abc-track"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_run_scoped_tool_loop_gemini_filters_allowlist():
+    client = MCPClient(llm_provider="gemini")
+    decl_a = types.FunctionDeclaration(name="add-abc-track", description="a", parameters={})
+    decl_b = types.FunctionDeclaration(name="inspect-entity", description="b", parameters={})
+    client._get_gemini_tools = AsyncMock(
+        return_value=[types.Tool(function_declarations=[decl_a, decl_b])]
+    )
+    client.run_tool_loop = AsyncMock(return_value=([], "gemini-ok", None))
+
+    reply = await client.run_scoped_tool_loop(
+        user_message="make notes",
+        system_instruction="scoped-system",
+        tool_allowlist={"add-abc-track"},
+    )
+
+    assert reply == "gemini-ok"
+    client.run_tool_loop.assert_awaited_once()
+    call = client.run_tool_loop.await_args
+    assert len(call.args[0]) == 1
+    assert call.args[0][0].role == "user"
+    assert call.args[0][0].parts[0].text == "make notes"
+    filtered_decl_names = [d.name for d in call.args[1].tools[0].function_declarations]
+    assert filtered_decl_names == ["add-abc-track"]
+
+
+@pytest.mark.asyncio
+async def test_run_scoped_tool_loop_gemini_raises_when_no_allowlisted_tool():
+    client = MCPClient(llm_provider="gemini")
+    decl = types.FunctionDeclaration(name="inspect-entity", description="x", parameters={})
+    client._get_gemini_tools = AsyncMock(
+        return_value=[types.Tool(function_declarations=[decl])]
+    )
+
+    with pytest.raises(RuntimeError, match="No tools in allowlist"):
+        await client.run_scoped_tool_loop(
+            user_message="x",
+            system_instruction="y",
+            tool_allowlist={"add-abc-track"},
+        )
+
+
 def test_system_instruction_includes_mastering_safety_for_audio_tracks():
     """Instruction should prevent muting imported sample/audio tracks during mastering."""
     lowered = SYSTEM_INSTRUCTION.lower()
-    assert "mastering safety" in lowered
-    assert "get-project-summary" in lowered
+    assert "mastering / mixing safety" in lowered
+    assert "inspect the project" in lowered
     assert "audio-track players" in lowered
     assert "audioDevice".lower() in lowered
-    assert "disconnect" in lowered and "reconnect" in lowered
+    assert "disconnect a source cable" in lowered
+    assert "reconnect that same source" in lowered
 
 
 def test_system_instruction_includes_mixing_fx_safety():
     """Mixing/FX edits should preserve all audible sources like mastering."""
     lowered = SYSTEM_INSTRUCTION.lower()
-    assert "mixing and fx safety" in lowered
+    assert "mastering / mixing safety" in lowered
     assert "audio-track" in lowered or "audio-track players" in lowered
-    assert "update-entity-values" in lowered
-    assert "remove-entity" in lowered
+    assert "targeted value/connection updates" in lowered
+    assert "bulk removal" in lowered
 
 
 def test_mixing_skill_markdown_includes_source_preservation():

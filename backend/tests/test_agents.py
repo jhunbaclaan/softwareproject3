@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from agents.graph import run_agent_graph, should_resolve_intent
+from agents.graph import run_agent_graph, should_resolve_intent, route_after_precall
 from agents.mcp_client_new import MCPClient
 
 
@@ -60,6 +60,7 @@ async def test_run_agent_graph_no_intent_resolution():
         daw_context=None,
         stream_callback=None,
         project_config_precall=None,
+        melody_subagent_result=None,
     )
 
 @pytest.mark.asyncio
@@ -83,6 +84,7 @@ async def test_run_agent_graph_with_intent_resolution():
         daw_context=None,
         stream_callback=None,
         project_config_precall=None,
+        melody_subagent_result=None,
     )
 
 
@@ -133,18 +135,73 @@ async def test_multiple_user_turns():
 
 @pytest.mark.asyncio
 async def test_style_pattern_matching():
-    """Test various style keywords."""
+    """Test various style keywords and audio-shaping verbs.
+
+    Style-identity phrases ("sounds like", "style of", "inspired by") still
+    route through the synth recommender. Bare adjectives like ``warm`` or
+    ``classic`` no longer count as style on their own — they either go
+    straight to the main tool loop (so the LLM + audio-macros skill can
+    decide) or, if the tightened AUDIO_SHAPING_PATTERNS matches, are
+    short-circuited to ``run_llm_tools`` so no NEW device is added.
+    """
     test_cases = [
+        # Style-identity phrases → recommender
         ("make it sound like Daft Punk", "resolve_synth_intent"),
-        ("classic 808 drum sound", "resolve_synth_intent"),
-        ("warm analog bass", "resolve_synth_intent"),
-        ("add heisenberg synth", "run_llm_tools"),  # Specific entity = no resolution
-        ("list entities", "run_llm_tools"),  # Tool call = no resolution
+        ("make a beat in the style of Daft Punk", "resolve_synth_intent"),
+        ("inspired by Aphex Twin", "resolve_synth_intent"),
+        # Audio-shaping verbs → main tool loop (audio-macros skill)
+        ("make this sound more bassy", "run_llm_tools"),
+        ("can you make it warmer", "run_llm_tools"),
+        ("make the lead wider", "run_llm_tools"),
+        ("tighter and punchier please", "run_llm_tools"),
+        ("add more reverb to the pad", "run_llm_tools"),
+        # Bare adjectives are no longer style — fall through to LLM
+        ("warm analog bass", "run_llm_tools"),
+        ("classic 808 drum sound", "run_llm_tools"),
+        # Specific entity / tool call → main tool loop
+        ("add heisenberg synth", "run_llm_tools"),
+        ("list entities", "run_llm_tools"),
     ]
 
     for query, expected_route in test_cases:
         result = should_resolve_intent({"current_query": query})
         assert result == expected_route, f"Failed for query: {query}"
+
+
+def test_route_after_precall_precedence():
+    """Audio intent beats melody; melody beats style fallback."""
+    assert (
+        route_after_precall({"current_query": "generate a bassline with elevenlabs vocals"})
+        == "run_llm_tools"
+    )
+    assert (
+        route_after_precall({"current_query": "write a funky bassline in abc notation"})
+        == "generate_midi_melody"
+    )
+    assert (
+        route_after_precall({"current_query": "inspired by Daft Punk"})
+        == "resolve_synth_intent"
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_agent_graph_melody_query_runs_subagent_then_llm():
+    """Melody queries should run the scoped melody loop before final response loop."""
+    mock_client = AsyncMock(spec=MCPClient)
+    mock_client.run_scoped_tool_loop.return_value = "Wrote a 8-bar Dorian bassline."
+    mock_client.run_llm_tool_loop.return_value = ("Added an 8-bar Dorian bassline.", None)
+
+    reply, music = await run_agent_graph(
+        mock_client,
+        query="write a funky bassline",
+        history=[],
+    )
+
+    assert reply == "Added an 8-bar Dorian bassline."
+    mock_client.run_scoped_tool_loop.assert_called_once()
+    mock_client.run_llm_tool_loop.assert_called_once()
+    kwargs = mock_client.run_llm_tool_loop.call_args.kwargs
+    assert kwargs["melody_subagent_result"].startswith("Success:")
 
 
 @pytest.mark.asyncio

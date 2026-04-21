@@ -83,43 +83,74 @@ def _normalize_music_length_ms(raw: Any) -> int:
 
 def load_system_instruction() -> str:
     base_instruction = (
-        "You are an Audiotool music production assistant. You help users add instruments and "
-        "effects to their projects by calling the available tools.\n\n"
-        "ENTITY TRACKING:\n"
-        "When a tool returns an entity ID (e.g. 'Entity ID: abc-123'), remember it. "
-        "When the user refers to an entity by name or says 'it', use the entity ID from "
-        "the most recent relevant tool result. You MUST always use the correct entity ID "
-        "when calling update-entity-position or other entity tools.\n\n"
-        "GENERAL:\n"
-        "Always call the tool immediately when you have enough information; "
-        "do not ask for parameters the user has not mentioned unless truly ambiguous. "
-        "When the user asks to change the tempo/BPM or time signature, call `update-project-config` immediately.\n\n"
-        "ELEVENLABS MUSIC:\n"
-        "When the user wants AI-generated audio from a text description (e.g. 'make a 15s lo-fi beat'), "
-        f"call the `{GENERATE_MUSIC_TOOL_NAME}` tool with their prompt. Do not use this for ABC notation "
-        "(use add-abc-track instead). Describe style and mood; if generation fails, retry with a generic "
-        "style description and avoid naming specific tunes or copyrighted titles. "
-        "If they want sung vocals or specific lyrics in the generated audio, pass force_instrumental=false "
-        "(default true means instrumental only). "
-        "Timeline placement is done by the Nexus web app when an Audiotool project is connected in the sidebar; "
-        "do not tell the user the clip is already on their Audiotool timeline unless they have that connection.\n\n"
-        "MASTERING SAFETY:\n"
-        "Before rewiring for mastering, call get-project-summary and identify all currently audible sources. "
-        "This includes note-track players AND audio-track players (for example audioDevice entities created by imported samples). "
-        "If you disconnect a source cable, reconnect that same source in the replacement chain immediately. "
-        "Do not remove cables unless their replacement routing is planned in the same mastering step.\n\n"
-        "MIXING AND FX SAFETY:\n"
-        "The same source-preservation rules apply when adding or changing mix effects: keep every note-track and audio-track "
-        "player (including audioDevice for samples) routed to the mixer. Prefer update-entity-values and targeted connection "
-        "changes over bulk remove-entity to replace a working effect chain.\n\n"
-        "ABC NOTATION:\n"
-        "When calling add-abc-track, pass abcNotation with standard ABC layout: each information field "
-        "on its own line (newlines between X:, T:, M:, K:, L:, etc.), then the tune body. "
-        "Do not put the entire header on one line with spaces—that breaks parsing.\n\n"
-        "RESPONSE FORMAT:\n"
-        "Always respond in plain text. Do not use any markdown formatting such as "
-        "bold (**), italic (*), headers (#), bullet points (-), numbered lists, "
-        "or code blocks. Do not use emojis. Keep responses concise and conversational.\n\n"
+        "# Role\n"
+        "You are Nexus, an Audiotool music-production assistant. You help users build and "
+        "edit their projects by calling the available production tools.\n\n"
+
+        "# Private vs user-facing language\n"
+        "- NEVER mention the internal names or identifiers of your tools in replies to the user "
+        "(e.g. do not say 'I used update-entity-values', 'via get-project-summary', etc.).\n"
+        "- Describe what you did in natural musical language: 'I updated the synth parameters', "
+        "'I added a wide pad', 'I inspected the current project to find the tempo'.\n"
+        "- Do not expose JSON, schema names, or entity UUIDs unless the user explicitly asks.\n\n"
+
+        "# Entity tracking\n"
+        "When a tool returns an entity id, remember it internally. When the user refers to an "
+        "entity by name or says 'it', re-use the most recent relevant id when you next modify "
+        "that entity. Never paste raw ids into the user-facing reply.\n\n"
+
+        "# Melody / MIDI vs audio generation (IMPORTANT)\n"
+        "- When the user asks you to 'generate a melody', 'write a bassline', 'write a riff', "
+        "'create notes', 'make a chord progression', or otherwise asks for played notes on a "
+        "synthesizer or instrument, default to the ABC notation / MIDI track tool. Produce valid "
+        "ABC and insert it as a note track.\n"
+        "- Before generating a melody/bassline/chord progression yourself via the ABC "
+        "notation tool (i.e. when the melody subagent was not invoked), you MUST "
+        "first call the project-inspection tool to fetch the current tempo and, if "
+        "possible, the key/chord context. Use those values in the ABC so it lines "
+        "up with the user's project. If the inspection fails, pick sensible defaults "
+        "and briefly note them in your reply.\n"
+        "- Only use the ElevenLabs audio-generation tool when the user explicitly asks for an "
+        "audio sample, an audio loop, a bed/beat, vocals, or a rendered audio clip. Phrases like "
+        "'make me a 15s lo-fi sample', 'render vocals', or 'generate audio of ...' belong here. "
+        "When the user wants vocals or specific lyrics performed, pass force_instrumental=false.\n"
+        "- If the user is ambiguous and the project already has instruments loaded, prefer ABC "
+        "(it slots into their existing tracks).\n"
+        "- Timeline placement for generated audio is done by the Nexus web app only when an "
+        "Audiotool project is connected in the sidebar; do not claim the clip is already on "
+        "their timeline unless that connection exists.\n\n"
+
+        "# General behavior\n"
+        "Call tools immediately when you have enough information. Do not ask for parameters the "
+        "user has not mentioned unless genuinely ambiguous. When the user asks to change tempo "
+        "or time signature, update the project configuration right away. "
+        "Many synths and effects support presets; when the user asks for a tone "
+        "change, consider browsing presets for the relevant device rather than "
+        "guessing parameters.\n\n"
+
+        "# Mastering / mixing safety\n"
+        "Before rewiring for mastering, first inspect the project and identify every audible "
+        "source (note-track players AND audio-track players, including audioDevice entities from "
+        "imported samples). If you disconnect a source cable, reconnect that same source in the "
+        "replacement chain immediately. Prefer targeted value/connection updates over bulk removal "
+        "when replacing a working effect chain.\n\n"
+
+        "# ABC notation formatting\n"
+        "When you provide ABC, each information field goes on its own line (X:, T:, M:, K:, L:, "
+        "then the tune body). Never put the full header on one line - that breaks parsing.\n\n"
+
+        "# Response style\n"
+        "Use markdown when it genuinely helps readability: bold for key parameter "
+        "names, short bullet lists for multi-step actions, inline code for entity "
+        "names or parameter keys. Do not wrap your whole reply in a code block, "
+        "do not use level-1 or level-2 headings, and do not use emojis. Keep "
+        "replies concise and conversational - a couple of sentences plus a short "
+        "result summary is usually enough.\n\n"
+
+        "# Routing marker (internal)\n"
+        "If the user's request is clearly about generating played notes (melody/bassline/riff/"
+        "chord progression) but you have not been routed to the melody subagent, silently "
+        "proceed with the ABC notation tool yourself. Do not mention this marker to the user.\n\n"
     )
     
     skills_dir = os.path.join(os.path.dirname(__file__), "skills")
@@ -323,10 +354,8 @@ class MCPClient:
         access_token: str,
         expires_at: int,
         client_id: str,
-        redirect_url: str,
-        scope: str,
         project_url: str,
-        refresh_token: Optional[str] = None
+        refresh_token: str,
     ) -> str:
         """Initialize authenticated session with auth tokens and project URL"""
         print("[MCP Client] Initializing session...")
@@ -334,13 +363,9 @@ class MCPClient:
             "accessToken": access_token,
             "expiresAt": expires_at,
             "clientId": client_id,
-            "redirectUrl": redirect_url,
-            "scope": scope,
             "projectUrl": project_url,
+            "refreshToken": refresh_token,
         }
-
-        if refresh_token:
-            tool_args["refreshToken"] = refresh_token
 
         print(f"[MCP Client] Calling initialize-session tool with project: {project_url}")
 
@@ -609,16 +634,19 @@ class MCPClient:
         system: str = SYSTEM_INSTRUCTION,
         max_iterations: int = 25,
         stream_callback: Optional[Any] = None,
+        tools: Optional[list] = None,
     ) -> tuple[list, str, Optional[Dict[str, Any]]]:
         """Run the Anthropic Claude <-> MCP tool-calling loop.
 
         messages: list of {"role": "user"|"assistant", "content": ...} in API format.
+        tools: optional explicit tool list (defaults to the full cached set).
         Returns (updated_messages, final_text_reply, optional generated_music dict).
         """
         if self._anthropic_client is None:
             raise RuntimeError("Anthropic client not configured or not connected")
 
-        tools = await self._get_anthropic_tools()
+        if tools is None:
+            tools = await self._get_anthropic_tools()
         if not tools:
             raise RuntimeError("No tools available for Anthropic")
 
@@ -719,16 +747,19 @@ class MCPClient:
         system: str = SYSTEM_INSTRUCTION,
         max_iterations: int = 25,
         stream_callback: Optional[Any] = None,
+        tools: Optional[list] = None,
     ) -> tuple[list[dict], str, Optional[Dict[str, Any]]]:
         """Run the OpenAI chat completions <-> MCP tool-calling loop.
 
         messages: list of {"role": "user"|"assistant"|"system", "content": str} in API format.
+        tools: optional explicit tool list (defaults to the full cached set).
         Returns (updated_messages, final_text_reply, optional generated_music dict).
         """
         if self._openai_client is None:
             raise RuntimeError("OpenAI client not configured or not connected")
 
-        tools = await self._get_openai_tools()
+        if tools is None:
+            tools = await self._get_openai_tools()
         if not tools:
             raise RuntimeError("No tools available for OpenAI")
 
@@ -853,12 +884,13 @@ class MCPClient:
         return (
             "[DAW project context] The user's current project has the following settings: "
             + ", ".join(parts) + ". "
-            "If the user asks to change the tempo or time signature, you MUST call `update-project-config` "
-            "with the new values. Do not claim the change was made without calling the tool. "
-            "When the user wants something that fits their project, use get-project-summary "
-            "and export-tracks-abc to gather deeper context (key, chord progression, note ranges) "
-            "before generating. If the user just asks for a general sample without mentioning "
-            "matching the project, ignore this context and use only their description."
+            "If the user asks to change the tempo or time signature, you MUST call the "
+            "project-configuration tool with the new values. Do not claim the change was made "
+            "without calling the tool. When the user wants something that fits their project, "
+            "use the project-summary and ABC-export tools to gather deeper context (key, chord "
+            "progression, note ranges) before generating. If the user just asks for a general "
+            "sample without mentioning matching the project, ignore this context and use only "
+            "their description."
         )
 
     async def run_llm_tool_loop(
@@ -868,6 +900,7 @@ class MCPClient:
         daw_context: Optional[Dict[str, Any]] = None,
         stream_callback: Optional[Any] = None,
         project_config_precall: Optional[str] = None,
+        melody_subagent_result: Optional[str] = None,
     ) -> tuple[str, Optional[Dict[str, Any]]]:
         """Provider-agnostic: run the appropriate LLM + MCP tool loop.
 
@@ -875,6 +908,7 @@ class MCPClient:
         resolved_intent_hint: optional hint from recommend-entity-for-style to prepend.
         daw_context: optional dict with DAW project settings (tempoBpm, timeSignature).
         project_config_precall: optional result text from deterministic update-project-config precall.
+        melody_subagent_result: optional result text from the melody/MIDI subagent node.
 
         Returns (reply_text, generated_music dict or None).
         """
@@ -883,9 +917,18 @@ class MCPClient:
         precall_hint = None
         if project_config_precall:
             precall_hint = (
-                "[System result] update-project-config already ran: "
+                "[System result] The project-configuration tool already ran: "
                 f"{project_config_precall}. Answer the user based on this; "
                 "do not claim changes that failed."
+            )
+
+        melody_hint = None
+        if melody_subagent_result:
+            melody_hint = (
+                "[System result] The melody/MIDI subagent ran and reported: "
+                f"{melody_subagent_result}. The notes are already inserted into the project. "
+                "Compose a short natural reply to the user describing what was added "
+                "(do not re-insert the track, and do not mention tool names)."
             )
 
         if self._llm_provider == "anthropic":
@@ -897,12 +940,19 @@ class MCPClient:
                 api_messages.append({"role": role, "content": content})
             if precall_hint:
                 api_messages.append({"role": "user", "content": precall_hint})
+            if melody_hint:
+                api_messages.append({"role": "user", "content": melody_hint})
             if resolved_intent_hint:
                 api_messages.append({
                     "role": "user",
                     "content": (
-                        f"[system hint] The recommend-entity-for-style tool returned: "
-                        f"{resolved_intent_hint}. Use this recommendation when deciding which entity to add."
+                        f"[system hint] A style recommender suggested this entity type for the "
+                        f"user's request: {resolved_intent_hint}. Only use it if you conclude a "
+                        f"NEW device should be added. If the user is asking to change the "
+                        f"character of existing sounds (more bass, brighter, wider, punchier, "
+                        f"etc.), prefer the audio-shaping skill: apply a preset with "
+                        f"list-presets/apply-preset, or insert/tweak a parametric EQ / stompbox "
+                        f"on the relevant mixer channel instead."
                     ),
                 })
             if daw_hint:
@@ -920,12 +970,19 @@ class MCPClient:
                 api_messages.append({"role": role, "content": m["content"]})
             if precall_hint:
                 api_messages.append({"role": "user", "content": precall_hint})
+            if melody_hint:
+                api_messages.append({"role": "user", "content": melody_hint})
             if resolved_intent_hint:
                 api_messages.append({
                     "role": "user",
                     "content": (
-                        f"[system hint] The recommend-entity-for-style tool returned: "
-                        f"{resolved_intent_hint}. Use this recommendation when deciding which entity to add."
+                        f"[system hint] A style recommender suggested this entity type for the "
+                        f"user's request: {resolved_intent_hint}. Only use it if you conclude a "
+                        f"NEW device should be added. If the user is asking to change the "
+                        f"character of existing sounds (more bass, brighter, wider, punchier, "
+                        f"etc.), prefer the audio-shaping skill: apply a preset with "
+                        f"list-presets/apply-preset, or insert/tweak a parametric EQ / stompbox "
+                        f"on the relevant mixer channel instead."
                     ),
                 })
             if daw_hint:
@@ -954,12 +1011,26 @@ class MCPClient:
                     role="user",
                 )
             )
+        if melody_hint:
+            contents.append(
+                types.Content(
+                    parts=[types.Part.from_text(text=melody_hint)],
+                    role="user",
+                )
+            )
         if resolved_intent_hint:
             contents.append(
                 types.Content(
                     parts=[types.Part.from_text(
-                        text=f"[system hint] The recommend-entity-for-style tool returned: "
-                        f"{resolved_intent_hint}. Use this recommendation when deciding which entity to add."
+                        text=(
+                            f"[system hint] A style recommender suggested this entity type for "
+                            f"the user's request: {resolved_intent_hint}. Only use it if you "
+                            f"conclude a NEW device should be added. If the user is asking to "
+                            f"change the character of existing sounds (more bass, brighter, "
+                            f"wider, punchier, etc.), prefer the audio-shaping skill: apply a "
+                            f"preset with list-presets/apply-preset, or insert/tweak a "
+                            f"parametric EQ / stompbox on the relevant mixer channel instead."
+                        )
                     )],
                     role="user",
                 )
@@ -973,6 +1044,83 @@ class MCPClient:
             )
         _, reply, music = await self.run_tool_loop(contents, config, stream_callback=stream_callback)
         return reply, music
+
+    async def run_scoped_tool_loop(
+        self,
+        user_message: str,
+        system_instruction: str,
+        tool_allowlist: set,
+        stream_callback: Optional[Any] = None,
+    ) -> str:
+        """Run a provider-agnostic one-shot tool-calling loop with a custom system
+        prompt and a restricted tool set. Used by subagent nodes.
+
+        The subagent runs with a fresh minimal context (only `user_message`);
+        it does not see the full chat history.
+
+        Returns the final text reply from the scoped loop.
+        """
+        if self._llm_provider == "anthropic":
+            all_tools = await self._get_anthropic_tools()
+            filtered = [t for t in all_tools if t.get("name") in tool_allowlist]
+            if not filtered:
+                raise RuntimeError(
+                    f"No tools in allowlist {tool_allowlist} are available for Anthropic."
+                )
+            messages = [{"role": "user", "content": user_message}]
+            _, reply, _ = await self.run_tool_loop_anthropic(
+                messages,
+                system=system_instruction,
+                stream_callback=stream_callback,
+                tools=filtered,
+            )
+            return reply
+
+        if self._llm_provider == "openai":
+            all_tools = await self._get_openai_tools()
+            filtered = [
+                t for t in all_tools
+                if t.get("function", {}).get("name") in tool_allowlist
+            ]
+            if not filtered:
+                raise RuntimeError(
+                    f"No tools in allowlist {tool_allowlist} are available for OpenAI."
+                )
+            messages = [{"role": "user", "content": user_message}]
+            _, reply, _ = await self.run_tool_loop_openai(
+                messages,
+                system=system_instruction,
+                stream_callback=stream_callback,
+                tools=filtered,
+            )
+            return reply
+
+        # Gemini path
+        all_tools_list = await self._get_gemini_tools()
+        all_decls = []
+        for tool in all_tools_list:
+            decls = getattr(tool, "function_declarations", None) or []
+            all_decls.extend(decls)
+        filtered_decls = [fd for fd in all_decls if fd.name in tool_allowlist]
+        if not filtered_decls:
+            raise RuntimeError(
+                f"No tools in allowlist {tool_allowlist} are available for Gemini."
+            )
+        filtered_tools = [types.Tool(function_declarations=filtered_decls)]
+        config = types.GenerateContentConfig(
+            tools=filtered_tools,
+            system_instruction=system_instruction,
+        )
+        contents = [
+            types.Content(
+                parts=[types.Part.from_text(text=user_message)],
+                role="user",
+            )
+        ]
+        _, reply, _ = await self.run_tool_loop(
+            contents, config, stream_callback=stream_callback
+        )
+        return reply
 
     # ------------------------------------------------------------------
     # Public API

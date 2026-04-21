@@ -16,6 +16,7 @@ const FAKE_AUDIO_BASE64 = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 test.describe('Music Generation', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
+      window.localStorage.setItem('tutorial.seen', 'true');
       window.localStorage.setItem('tutorialCompleted', 'true');
     });
   });

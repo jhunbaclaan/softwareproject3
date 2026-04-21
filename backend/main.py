@@ -219,8 +219,6 @@ async def _ensure_client(request: AgentRequest) -> MCPClient:
                         access_token=request.authTokens.accessToken,
                         expires_at=request.authTokens.expiresAt,
                         client_id=request.authTokens.clientId,
-                        redirect_url=request.authTokens.redirectUrl,
-                        scope=request.authTokens.scope,
                         project_url=request.projectUrl,
                         refresh_token=request.authTokens.refreshToken,
                     )
@@ -275,8 +273,6 @@ async def _ensure_client(request: AgentRequest) -> MCPClient:
                     access_token=request.authTokens.accessToken,
                     expires_at=request.authTokens.expiresAt,
                     client_id=request.authTokens.clientId,
-                    redirect_url=request.authTokens.redirectUrl,
-                    scope=request.authTokens.scope,
                     project_url=request.projectUrl,
                     refresh_token=request.authTokens.refreshToken,
                 )

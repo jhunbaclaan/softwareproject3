@@ -220,6 +220,93 @@ async def test_agent_run_with_auth_tokens(sample_auth_tokens):
 
 
 @pytest.mark.asyncio
+async def test_agent_run_rejects_auth_tokens_missing_refresh_token():
+    """Auth token payload now requires refreshToken."""
+    request_data = {
+        "prompt": "add synth",
+        "authTokens": {
+            "accessToken": "tok",
+            "expiresAt": 9999999999999,
+            "clientId": "cid",
+        },
+        "projectUrl": "https://beta.audiotool.com/studio?project=test",
+    }
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post("/agent/run", json=request_data)
+
+    assert response.status_code == 422
+    detail = response.json().get("detail", [])
+    assert any(
+        err.get("loc") == ["body", "authTokens", "refreshToken"]
+        for err in detail
+    )
+
+
+@pytest.mark.asyncio
+async def test_agent_run_accepts_legacy_auth_fields_but_ignores_them():
+    """Legacy redirectUrl/scope fields should not break request parsing."""
+    with patch("main._ensure_client", new_callable=AsyncMock) as mock_ensure, \
+         patch("main.run_agent_graph") as mock_run:
+
+        mock_client = AsyncMock()
+        mock_client.set_elevenlabs_api_key = MagicMock()
+        mock_ensure.return_value = mock_client
+        mock_run.return_value = ("Success with legacy extras", None)
+
+        request_data = {
+            "prompt": "add synth",
+            "authTokens": {
+                "accessToken": "tok",
+                "expiresAt": 9999999999999,
+                "refreshToken": "ref",
+                "clientId": "cid",
+                "redirectUrl": "http://localhost/callback",
+                "scope": "project:write sample:write",
+            },
+            "projectUrl": "https://beta.audiotool.com/studio?project=test",
+        }
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            response = await ac.post("/agent/run", json=request_data)
+
+        assert response.status_code == 200
+        parsed_request = mock_ensure.await_args.args[0]
+        auth = parsed_request.authTokens
+        assert auth is not None
+        assert auth.model_dump() == {
+            "accessToken": "tok",
+            "expiresAt": 9999999999999,
+            "refreshToken": "ref",
+            "clientId": "cid",
+        }
+
+
+@pytest.mark.asyncio
+async def test_ensure_client_passes_refresh_token_to_initialize_session(sample_agent_request, mock_mcp_client):
+    """Client bootstrap must forward refresh_token to initialize-session."""
+    import main
+
+    with patch("main.MCPClient") as MockClient, \
+         patch("main._get_mcp_server_path", return_value="server.js"):
+
+        MockClient.return_value = mock_mcp_client
+        main._client = None
+
+        await _ensure_client(sample_agent_request)
+
+        mock_mcp_client.initialize_session.assert_awaited_once()
+        assert (
+            mock_mcp_client.initialize_session.await_args.kwargs["refresh_token"]
+            == sample_agent_request.authTokens.refreshToken
+        )
+        main._client = None
+        main._client_project_url = None
+        main._client_llm_provider = "gemini"
+        main._client_llm_api_key = None
+
+
+@pytest.mark.asyncio
 async def test_agent_run_without_auth_tokens():
     """Test agent without auth tokens (should still work)."""
     with patch("main._ensure_client", new_callable=AsyncMock) as mock_ensure, \
