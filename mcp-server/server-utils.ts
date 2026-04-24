@@ -3,22 +3,66 @@
  * All pure functions and constant data structures live here.
  */
 
-import { readFileSync } from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
 import abcjs from "abcjs";
+import type { GmInstrumentSlug, GmDrumSlug } from "@audiotool/nexus/api";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+/**
+ * Canonical 0-indexed GM program numbers by kebab-case slug.
+ *
+ * These mirror `@audiotool/nexus`'s internal `gmInstrumentProgramBySlug` /
+ * `gmDrumProgramBySlug` tables. The SDK currently exports the *types*
+ * (GmInstrumentSlug, GmDrumSlug) publicly but not the underlying data, so we
+ * ship it here to validate user input against the same canonical list.
+ *
+ * The GM 1.0 assignments are pinned — these tables shouldn't need to change
+ * between SDK releases. The `satisfies Record<..., number>` clause gives us
+ * a compile-time error if a slug we ship doesn't match the SDK type.
+ */
+const GM_INSTRUMENT_PROGRAM_BY_SLUG = {
+  "acoustic-piano": 0, "bright-grand-2": 1, "piano-2": 2, "honky-tonk-piano": 3,
+  "electronic-piano-1": 4, "electronic-piano-2": 5, harpsichord: 6, clavinet: 7,
+  celesta: 8, glockenspiel: 9, "music-box": 10, vibraphone: 11,
+  marimba: 12, xylophone: 13, "tubular-bells": 14, dulcimer: 15,
+  "jazz-organ": 16, "hammond-organ": 17, "rock-organ": 18, "church-organ": 19,
+  "reed-organ": 20, accordion: 21, harmonica: 22, bandoneon: 23,
+  "nylon-guitar": 24, "dark-steel-guitar": 25, "jazz-guitar": 26, "clean-guitar": 27,
+  "muted-guitar": 28, "overdriven-guitar": 29, "distortion-guitar": 30, "guitar-harmonics": 31,
+  "acoustic-bass": 32, "fingered-bass": 33, "picked-bass": 34, "fretless-bass": 35,
+  "slap-bass-1": 36, "slap-bass-2": 37, "synth-bass-1": 38, "synth-bass-2": 39,
+  violin: 40, viola: 41, cello: 42, contrabass: 43,
+  "tremolo-strings": 44, "pizzicato-strings": 45, harp: 46, timpani: 47,
+  "string-section": 48, "string-ensemble": 49, "synth-strings-1": 50, "synth-strings-2": 51,
+  "choir-aahs": 52, "choir-oohs": 53, "synth-voice": 54, "orchestra-hit": 55,
+  trumpet: 56, trombone: 57, tuba: 58, "muted-trumpet": 59,
+  "french-horn": 60, "brass-section": 61, "synth-brass-1": 62, "synth-brass-2": 63,
+  "soprano-sax": 64, "alto-sax": 65, "tenor-sax": 66, "baritone-sax": 67,
+  oboe: 68, "english-horn": 69, bassoon: 70, clarinet: 71,
+  piccolo: 72, flute: 73, recorder: 74, "pan-flute": 75,
+  "blown-bottle": 76, shakuhachi: 77, whistle: 78, ocarina: 79,
+  "square-lead": 80, "saw-lead": 81, "calliope-lead": 82, "chiffer-lead": 83,
+  charang: 84, "solo-voice": 85, "fifth-sawtooth": 86, "bass-lead": 87,
+  "fantasia-pad": 88, "warm-pad": 89, polysynth: 90, "space-voice": 91,
+  "bowed-glass": 92, metal: 93, halo: 94, sweep: 95,
+  rain: 96, soundtrack: 97, crystal: 98, atmosphere: 99,
+  brightness: 100, goblins: 101, "echo-drops": 102, "sci-fi": 103,
+  sitar: 104, banjo: 105, shamisen: 106, koto: 107,
+  kalimba: 108, bagpipe: 109, fiddle: 110, shanai: 111,
+  "tinkle-bells": 112, agogo: 113, "steel-drums": 114, woodblock: 115,
+  "taiko-drum": 116, "melodic-drum": 117, "synth-tom": 118, "reverse-cymbal": 119,
+  "guitar-fret-noise": 120, "breath-noise": 121, seashore: 122, "bird-tweet": 123,
+  "telephone-ring": 124, helicopter: 125, applause: 126, gunshot: 127,
+} as const satisfies Record<GmInstrumentSlug, number>;
 
-/** Gakki preset UUIDs by GM instrument name (lowercase, underscores). Loaded from gakki-instruments.json. */
-export let gakkiByGmName: Record<string, string> = {};
-try {
-  const gakkiPath = join(__dirname, "..", "gakki-instruments.json");
-  const data = JSON.parse(readFileSync(gakkiPath, "utf-8"));
-  gakkiByGmName = data.by_gm_name ?? {};
-} catch {
-  // Fallback if file missing; Gakki will use default preset
-}
+const GM_DRUM_PROGRAM_BY_SLUG = {
+  "standard-kit": 0,
+  "room-kit": 8,
+  "power-kit": 16,
+  "electronic-kit": 24,
+  "analog-kit": 25,
+  "jazz-kit": 32,
+  "brush-kit": 40,
+  "orchestra-kit": 48,
+} as const satisfies Record<GmDrumSlug, number>;
 
 export const VALID_ENTITY_TYPES = [
   "audioDevice", "audioMerger", "audioSplitter", "autoFilter", "bandSplitter",
@@ -54,7 +98,86 @@ export const ENTITY_TYPE_ALIASES: Record<string, string> = {
   tube: "stompboxTube",
   sampler: "space",
   modular: "pulverisateur",
-  "fm synth": "pulsar"
+  "fm synth": "pulsar",
+  // GM instrument names → gakki sampler. The specific preset is picked later
+  // via `client.presets.getInstrument(slug)`; see resolveGmInstrumentSlug.
+  violin: "gakki",
+  viola: "gakki",
+  cello: "gakki",
+  contrabass: "gakki",
+  "double bass": "gakki",
+  "upright bass": "gakki",
+  "acoustic bass": "gakki",
+  trumpet: "gakki",
+  trombone: "gakki",
+  tuba: "gakki",
+  "french horn": "gakki",
+  horn: "gakki",
+  "english horn": "gakki",
+  "muted trumpet": "gakki",
+  flute: "gakki",
+  piccolo: "gakki",
+  oboe: "gakki",
+  clarinet: "gakki",
+  bassoon: "gakki",
+  "pan flute": "gakki",
+  recorder: "gakki",
+  shakuhachi: "gakki",
+  ocarina: "gakki",
+  whistle: "gakki",
+  sax: "gakki",
+  saxophone: "gakki",
+  "soprano sax": "gakki",
+  "alto sax": "gakki",
+  "tenor sax": "gakki",
+  "baritone sax": "gakki",
+  strings: "gakki",
+  "string section": "gakki",
+  "string ensemble": "gakki",
+  "pizzicato strings": "gakki",
+  "tremolo strings": "gakki",
+  brass: "gakki",
+  "brass section": "gakki",
+  piano: "gakki",
+  "grand piano": "gakki",
+  "acoustic piano": "gakki",
+  "electric piano": "gakki",
+  rhodes: "gakki",
+  wurlitzer: "gakki",
+  organ: "gakki",
+  "church organ": "gakki",
+  "rock organ": "gakki",
+  "jazz organ": "gakki",
+  "hammond organ": "gakki",
+  harpsichord: "gakki",
+  clavinet: "gakki",
+  celesta: "gakki",
+  glockenspiel: "gakki",
+  marimba: "gakki",
+  vibraphone: "gakki",
+  xylophone: "gakki",
+  "tubular bells": "gakki",
+  "music box": "gakki",
+  dulcimer: "gakki",
+  harp: "gakki",
+  timpani: "gakki",
+  choir: "gakki",
+  sitar: "gakki",
+  banjo: "gakki",
+  shamisen: "gakki",
+  koto: "gakki",
+  kalimba: "gakki",
+  bagpipe: "gakki",
+  bagpipes: "gakki",
+  fiddle: "gakki",
+  accordion: "gakki",
+  harmonica: "gakki",
+  "steel drums": "gakki",
+  "taiko drum": "gakki",
+  "acoustic guitar": "gakki",
+  "electric guitar": "gakki",
+  "nylon guitar": "gakki",
+  "jazz guitar": "gakki",
 };
 
 /** Instruments that can play note tracks (NoteTrackPlayer). Used for add-abc-track. */
@@ -82,15 +205,22 @@ export const INSTRUMENT_ALIASES: Record<string, string> = {
   "step sequencer": "tonematrix",
   arpeggiator: "matrixArpeggiator",
   matrix: "matrixArpeggiator",
-  // Gakki has French horn and other orchestral sounds
+  // Gakki has French horn and other orchestral sounds (GM-slug preset picked later)
   "french horn": "gakki",
   horn: "gakki",
   trumpet: "gakki",
   trombone: "gakki",
+  tuba: "gakki",
   brass: "gakki",
-  woodwind: "heisenberg",
-  flute: "heisenberg",
-  oboe: "heisenberg",
+  woodwind: "gakki",
+  flute: "gakki",
+  oboe: "gakki",
+  clarinet: "gakki",
+  bassoon: "gakki",
+  violin: "gakki",
+  viola: "gakki",
+  cello: "gakki",
+  piano: "gakki",
   "808": "beatbox8",
   "909": "beatbox9",
   modular: "pulverisateur",
@@ -227,83 +357,213 @@ export function resolveInstrumentType(input: string): string | null {
   return bestDist <= 3 ? best : null;
 }
 
-/** Short names / LLM outputs → keys in gakki-instruments.json by_gm_name */
-export const GAKKI_NAME_SYNONYMS: Record<string, string> = {
-  horn: "french_horn",
-  brass: "brass_section",
-  strings: "string_ensemble_1",
-  string: "string_ensemble_1",
-  orchestral: "string_ensemble_1",
-  symphonic: "string_ensemble_1",
-  piano: "acoustic_grand_piano",
-  grand_piano: "acoustic_grand_piano",
-  acoustic_piano: "acoustic_grand_piano",
-  electric_piano: "electric_piano_1",
+/**
+ * Canonical GM instrument slugs accepted by `client.presets.getInstrument()`.
+ * Backed by the pinned-GM-1.0 table above.
+ */
+export const GM_INSTRUMENT_SLUGS: ReadonlySet<GmInstrumentSlug> = new Set(
+  Object.keys(GM_INSTRUMENT_PROGRAM_BY_SLUG) as GmInstrumentSlug[],
+);
+
+/** Canonical GM drum-kit slugs accepted by `client.presets.getDrums()`. */
+export const GM_DRUM_SLUGS: ReadonlySet<GmDrumSlug> = new Set(
+  Object.keys(GM_DRUM_PROGRAM_BY_SLUG) as GmDrumSlug[],
+);
+
+export function isGmInstrumentSlug(s: string): s is GmInstrumentSlug {
+  return GM_INSTRUMENT_SLUGS.has(s as GmInstrumentSlug);
+}
+
+export function isGmDrumSlug(s: string): s is GmDrumSlug {
+  return GM_DRUM_SLUGS.has(s as GmDrumSlug);
+}
+
+function normalizeSlugInput(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, "-")
+    .replace(/[()]/g, "");
+}
+
+/**
+ * Friendly-name → canonical SDK slug overrides, for words the user commonly
+ * says that don't match a slug exactly.
+ *
+ * Keys are the *normalized* form of the input: lowercased, trimmed,
+ * spaces/underscores collapsed to hyphens.
+ */
+export const GM_INSTRUMENT_SLUG_SYNONYMS: Record<string, GmInstrumentSlug> = {
+  // Piano family
+  piano: "acoustic-piano",
+  "grand-piano": "acoustic-piano",
+  "acoustic-grand-piano": "acoustic-piano",
+  "acoustic-grand": "acoustic-piano",
+  "electric-piano": "electronic-piano-1",
+  rhodes: "electronic-piano-1",
+  wurlitzer: "electronic-piano-2",
+  // String family
+  strings: "string-section",
+  "string-ensemble-1": "string-section",
+  "string-ensemble-2": "string-ensemble",
+  orchestral: "string-section",
+  symphonic: "string-section",
+  "double-bass": "contrabass",
+  doublebass: "contrabass",
+  "upright-bass": "acoustic-bass",
+  // Brass
+  brass: "brass-section",
+  horn: "french-horn",
+  sax: "alto-sax",
+  saxophone: "alto-sax",
+  // Guitars
+  guitar: "clean-guitar",
+  "acoustic-guitar": "nylon-guitar",
+  "electric-guitar": "clean-guitar",
+  "bass-guitar": "fingered-bass",
+  bass: "fingered-bass",
+  "steel-guitar": "dark-steel-guitar",
+  // Organs & misc
+  organ: "church-organ",
+  bells: "tubular-bells",
+  "tubular-bell": "tubular-bells",
+  "pan-pipes": "pan-flute",
+  bagpipes: "bagpipe",
+  choir: "choir-aahs",
+};
+
+/** Friendly-name → canonical GM drum-kit slug overrides. */
+export const GM_DRUM_SLUG_SYNONYMS: Record<string, GmDrumSlug> = {
+  drums: "standard-kit",
+  kit: "standard-kit",
+  standard: "standard-kit",
+  room: "room-kit",
+  power: "power-kit",
+  electronic: "electronic-kit",
+  analog: "analog-kit",
+  jazz: "jazz-kit",
+  brush: "brush-kit",
+  brushes: "brush-kit",
+  orchestra: "orchestra-kit",
+  orchestral: "orchestra-kit",
 };
 
 /**
- * Resolve an instrument name to a Gakki preset UUID.
+ * Resolve a user-supplied instrument name to a canonical GM slug accepted by
+ * `client.presets.getInstrument()`. Returns undefined if nothing matches.
  */
-export function resolveGakkiPresetUuid(instrumentName: string): string | undefined {
-  const key = instrumentName
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "_")
-    .replace(/[()]/g, "");
-  const direct = gakkiByGmName[key];
-  if (direct) return direct;
-  const syn = GAKKI_NAME_SYNONYMS[key];
-  return syn ? gakkiByGmName[syn] : undefined;
+export function resolveGmInstrumentSlug(
+  input: string,
+): GmInstrumentSlug | undefined {
+  const key = normalizeSlugInput(input);
+  if (!key) return undefined;
+  if (isGmInstrumentSlug(key)) return key;
+  return GM_INSTRUMENT_SLUG_SYNONYMS[key];
 }
 
-/** Match user/ABC text to GM keys (order: multi-word phrases before single words). */
-export const GAKKI_TEXT_PATTERNS: ReadonlyArray<{ pattern: RegExp; gmKey: string }> = [
-  { pattern: /\bfrench\s+horn\b/i, gmKey: "french_horn" },
-  { pattern: /\benglish\s+horn\b/i, gmKey: "english_horn" },
-  { pattern: /\bmuted\s+trumpet\b/i, gmKey: "muted_trumpet" },
-  { pattern: /\bbrass\s+section\b/i, gmKey: "brass_section" },
-  { pattern: /\bstring\s+ensemble\s*2\b/i, gmKey: "string_ensemble_2" },
-  { pattern: /\bstring\s+ensemble\s*1\b/i, gmKey: "string_ensemble_1" },
-  { pattern: /\bacoustic\s+piano\b/i, gmKey: "acoustic_grand_piano" },
-  { pattern: /\belectric\s+piano\b/i, gmKey: "electric_piano_1" },
-  { pattern: /\bgrand\s+piano\b/i, gmKey: "acoustic_grand_piano" },
-  { pattern: /\btrumpet\b/i, gmKey: "trumpet" },
-  { pattern: /\btrombone\b/i, gmKey: "trombone" },
-  { pattern: /\btuba\b/i, gmKey: "tuba" },
-  { pattern: /\bviolin\b/i, gmKey: "violin" },
-  { pattern: /\bviola\b/i, gmKey: "viola" },
-  { pattern: /\bcello\b/i, gmKey: "cello" },
-  { pattern: /\bcontrabass\b/i, gmKey: "contrabass" },
-  { pattern: /\bflute\b/i, gmKey: "flute" },
-  { pattern: /\bpiccolo\b/i, gmKey: "piccolo" },
-  { pattern: /\boboe\b/i, gmKey: "oboe" },
-  { pattern: /\bclarinet\b/i, gmKey: "clarinet" },
-  { pattern: /\bbassoon\b/i, gmKey: "bassoon" },
-  { pattern: /\bhorn\b/i, gmKey: "french_horn" },
-  { pattern: /\bbrass\b/i, gmKey: "brass_section" },
-  { pattern: /\bstrings\b/i, gmKey: "string_ensemble_1" },
-  { pattern: /\bpiano\b/i, gmKey: "acoustic_grand_piano" },
+/**
+ * Resolve a user-supplied drum-kit name to a canonical GM drum slug accepted
+ * by `client.presets.getDrums()`. Returns undefined if nothing matches.
+ */
+export function resolveGmDrumSlug(input: string): GmDrumSlug | undefined {
+  const key = normalizeSlugInput(input);
+  if (!key) return undefined;
+  if (isGmDrumSlug(key)) return key;
+  return GM_DRUM_SLUG_SYNONYMS[key];
+}
+
+/**
+ * Match freeform user or ABC text against common phrasings.
+ * Ordered so multi-word phrases match before single words.
+ */
+export const GM_INSTRUMENT_TEXT_PATTERNS: ReadonlyArray<{
+  pattern: RegExp;
+  slug: GmInstrumentSlug;
+}> = [
+  { pattern: /\bfrench\s+horn\b/i, slug: "french-horn" },
+  { pattern: /\benglish\s+horn\b/i, slug: "english-horn" },
+  { pattern: /\bmuted\s+trumpet\b/i, slug: "muted-trumpet" },
+  { pattern: /\bbrass\s+section\b/i, slug: "brass-section" },
+  { pattern: /\bstring\s+section\b/i, slug: "string-section" },
+  { pattern: /\bstring\s+ensemble\b/i, slug: "string-ensemble" },
+  { pattern: /\bpizzicato\s+strings?\b/i, slug: "pizzicato-strings" },
+  { pattern: /\btremolo\s+strings?\b/i, slug: "tremolo-strings" },
+  { pattern: /\belectric\s+piano\b/i, slug: "electronic-piano-1" },
+  { pattern: /\bacoustic\s+piano\b/i, slug: "acoustic-piano" },
+  { pattern: /\bgrand\s+piano\b/i, slug: "acoustic-piano" },
+  { pattern: /\bhonky[\s-]tonk\b/i, slug: "honky-tonk-piano" },
+  { pattern: /\bpan\s+flute\b/i, slug: "pan-flute" },
+  { pattern: /\bchurch\s+organ\b/i, slug: "church-organ" },
+  { pattern: /\brock\s+organ\b/i, slug: "rock-organ" },
+  { pattern: /\btrumpet\b/i, slug: "trumpet" },
+  { pattern: /\btrombone\b/i, slug: "trombone" },
+  { pattern: /\btuba\b/i, slug: "tuba" },
+  { pattern: /\bviolin\b/i, slug: "violin" },
+  { pattern: /\bviola\b/i, slug: "viola" },
+  { pattern: /\bcello\b/i, slug: "cello" },
+  { pattern: /\bcontrabass\b/i, slug: "contrabass" },
+  { pattern: /\bdouble\s*bass\b/i, slug: "contrabass" },
+  { pattern: /\bharp\b/i, slug: "harp" },
+  { pattern: /\bharpsichord\b/i, slug: "harpsichord" },
+  { pattern: /\btimpani\b/i, slug: "timpani" },
+  { pattern: /\bflute\b/i, slug: "flute" },
+  { pattern: /\bpiccolo\b/i, slug: "piccolo" },
+  { pattern: /\boboe\b/i, slug: "oboe" },
+  { pattern: /\bclarinet\b/i, slug: "clarinet" },
+  { pattern: /\bbassoon\b/i, slug: "bassoon" },
+  { pattern: /\brecorder\b/i, slug: "recorder" },
+  { pattern: /\bshakuhachi\b/i, slug: "shakuhachi" },
+  { pattern: /\bocarina\b/i, slug: "ocarina" },
+  { pattern: /\bwhistle\b/i, slug: "whistle" },
+  { pattern: /\bsax\w*\b/i, slug: "alto-sax" },
+  { pattern: /\bhorn\b/i, slug: "french-horn" },
+  { pattern: /\bbrass\b/i, slug: "brass-section" },
+  { pattern: /\bmarimba\b/i, slug: "marimba" },
+  { pattern: /\bvibraphone\b/i, slug: "vibraphone" },
+  { pattern: /\bxylophone\b/i, slug: "xylophone" },
+  { pattern: /\bglockenspiel\b/i, slug: "glockenspiel" },
+  { pattern: /\bsitar\b/i, slug: "sitar" },
+  { pattern: /\bbanjo\b/i, slug: "banjo" },
+  { pattern: /\bkoto\b/i, slug: "koto" },
+  { pattern: /\bkalimba\b/i, slug: "kalimba" },
+  { pattern: /\bbagpipes?\b/i, slug: "bagpipe" },
+  { pattern: /\bfiddle\b/i, slug: "fiddle" },
+  { pattern: /\baccordion\b/i, slug: "accordion" },
+  { pattern: /\bharmonica\b/i, slug: "harmonica" },
+  { pattern: /\bstrings\b/i, slug: "string-section" },
+  { pattern: /\bpiano\b/i, slug: "acoustic-piano" },
+  { pattern: /\borgan\b/i, slug: "church-organ" },
+  { pattern: /\bchoir\b/i, slug: "choir-aahs" },
 ];
 
-export function resolveGakkiPresetUuidFromHints(args: {
+/**
+ * Resolve a GM instrument slug from a combination of hint fields:
+ *   1. `orchestralVoice` (most specific),
+ *   2. `instrument`,
+ *   3. `abcNotation` (full-text pattern match).
+ * Returns undefined if no match is found — callers should then fall back to
+ * the `gakki` default preset.
+ */
+export function resolveGmInstrumentSlugFromHints(args: {
   instrument?: string;
   orchestralVoice?: string;
-  abcNotation: string;
-}): string | undefined {
+  abcNotation?: string;
+}): GmInstrumentSlug | undefined {
   for (const s of [args.orchestralVoice, args.instrument]) {
     if (!s?.trim()) continue;
-    const u = resolveGakkiPresetUuid(s);
-    if (u) return u;
+    const slug = resolveGmInstrumentSlug(s);
+    if (slug) return slug;
   }
   const haystack = [
-    args.abcNotation,
+    args.abcNotation ?? "",
     args.orchestralVoice ?? "",
     args.instrument ?? "",
-  ].join("\n");
-  for (const { pattern, gmKey } of GAKKI_TEXT_PATTERNS) {
-    if (pattern.test(haystack) && gakkiByGmName[gmKey]) {
-      return gakkiByGmName[gmKey];
-    }
+  ]
+    .filter(Boolean)
+    .join("\n");
+  if (!haystack) return undefined;
+  for (const { pattern, slug } of GM_INSTRUMENT_TEXT_PATTERNS) {
+    if (pattern.test(haystack)) return slug;
   }
   return undefined;
 }

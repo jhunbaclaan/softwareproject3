@@ -29,8 +29,11 @@ import {
   levenshtein,
   resolveEntityType,
   resolveInstrumentType,
-  resolveGakkiPresetUuid,
-  resolveGakkiPresetUuidFromHints,
+  resolveGmInstrumentSlug,
+  resolveGmInstrumentSlugFromHints,
+  resolveGmDrumSlug,
+  isGmInstrumentSlug,
+  isGmDrumSlug,
   parseAbcToNotes,
   normalizeAbcNotation,
   notesToAbc,
@@ -640,14 +643,17 @@ srv.registerTool(
   {
     description: [
       "Add one or more entities (instruments or effects) to the Audiotool project.",
-      "SINGLE MODE: provide entityType (and optional properties/x/y/autoConnectToMixer).",
+      "SINGLE MODE: provide entityType (and optional properties/x/y/autoConnectToMixer/instrument/drumKit).",
       "BATCH MODE: provide an `entities` array to create multiple entities in one call.",
       "Entity types by role:",
       "  - Synths/Generators: 'heisenberg', 'bassline', 'pulsar', 'pulverisateur', 'kobolt', 'space'",
+      "  - Sampler: 'gakki' (128 GM instruments + 8 drum kits — pass `instrument` or `drumKit`)",
       "  - Drums: 'machiniste', 'beatbox8', 'beatbox9'",
       "  - Logic/Sequencers: 'tonematrix', 'matrixArpeggiator'",
       "  - Effects: 'stompboxDelay', 'stompboxChorus', 'stompboxReverb', 'graphicalEQ', 'stompboxCompressor', etc.",
-      "When the user describes a sound or style (e.g. 'Daft Punk', 'warm pad'), pick the most fitting entity type.",
+      "When the user asks for a specific orchestral/GM instrument ('violin', 'french horn', 'marimba', 'pan flute', ...)",
+      "pass it as `entityType` or `instrument`: the server will create a gakki device with the matching GM preset loaded.",
+      "For a drum kit ('jazz kit', 'room kit', ...) pass it as `drumKit`.",
       "Typos are tolerated (e.g. 'hisenberg' resolves to 'heisenberg').",
       "If x/y are omitted the server auto-places the entity at a default position.",
     ].join("\n"),
@@ -656,12 +662,20 @@ srv.registerTool(
         .string()
         .optional()
         .describe(
-          "Type of entity to add (single mode). Examples: 'heisenberg', 'bassline', 'machiniste', 'tonematrix', 'stompboxDelay'",
+          "Type of entity to add (single mode). Examples: 'heisenberg', 'bassline', 'machiniste', 'violin', 'french horn', 'marimba'",
         ),
       properties: z
         .record(z.string(), z.any())
         .optional()
         .describe("Properties for the entity (single mode)"),
+      instrument: z
+        .string()
+        .optional()
+        .describe("Specific GM instrument for gakki devices (e.g. 'violin', 'french-horn', 'marimba'). See GmInstrumentSlug in the SDK for the full list."),
+      drumKit: z
+        .string()
+        .optional()
+        .describe("Specific GM drum kit for gakki devices (e.g. 'standard-kit', 'jazz-kit', 'room-kit'). See GmDrumSlug in the SDK for the full list."),
       x: z
         .number()
         .optional()
@@ -678,6 +692,8 @@ srv.registerTool(
       entities: z.array(z.object({
         entityType: z.string().describe("Type of entity to add"),
         properties: z.record(z.string(), z.any()).optional().describe("Properties"),
+        instrument: z.string().optional().describe("GM instrument slug for gakki"),
+        drumKit: z.string().optional().describe("GM drum-kit slug for gakki"),
         x: z.number().optional().describe("X position (optional)"),
         y: z.number().optional().describe("Y position (optional)"),
         autoConnectToMixer: z.boolean().optional().default(true).describe("Whether to automatically connect to mixer"),
@@ -687,12 +703,16 @@ srv.registerTool(
   async (args: {
     entityType?: string;
     properties?: Record<string, any>;
+    instrument?: string;
+    drumKit?: string;
     x?: number;
     y?: number;
     autoConnectToMixer?: boolean;
     entities?: Array<{
       entityType: string;
       properties?: Record<string, any>;
+      instrument?: string;
+      drumKit?: string;
       x?: number;
       y?: number;
       autoConnectToMixer?: boolean;
@@ -702,6 +722,8 @@ srv.registerTool(
       const itemsToCreate: Array<{
         entityType: string;
         properties?: Record<string, any>;
+        instrument?: string;
+        drumKit?: string;
         x?: number;
         y?: number;
         autoConnectToMixer?: boolean;
@@ -710,6 +732,8 @@ srv.registerTool(
         : [{
             entityType: args.entityType!,
             properties: args.properties,
+            instrument: args.instrument,
+            drumKit: args.drumKit,
             x: args.x,
             y: args.y,
             autoConnectToMixer: args.autoConnectToMixer,
@@ -719,7 +743,16 @@ srv.registerTool(
         throw new Error("Either 'entityType' (single mode) or 'entities' array (batch mode) must be provided.");
       }
 
-      const resolvedItems: Array<{ resolvedType: string; posX: number; posY: number; properties?: Record<string, any>; autoConnectToMixer?: boolean }> = [];
+      // Resolve entity types AND prefetch GM presets for any gakki devices up
+      // front, so the transaction itself can stay synchronous.
+      const resolvedItems: Array<{
+        resolvedType: string;
+        posX: number;
+        posY: number;
+        properties?: Record<string, any>;
+        autoConnectToMixer?: boolean;
+        gakkiPreset?: unknown;
+      }> = [];
       for (const item of itemsToCreate) {
         const resolvedType = resolveEntityType(item.entityType);
         if (!resolvedType) {
@@ -728,7 +761,48 @@ srv.registerTool(
         const posX = item.x ?? autoLayoutOffset * 120;
         const posY = item.y ?? 0;
         autoLayoutOffset++;
-        resolvedItems.push({ resolvedType, posX, posY, properties: item.properties, autoConnectToMixer: item.autoConnectToMixer });
+
+        let gakkiPreset: unknown | undefined;
+        if (resolvedType === "gakki") {
+          const client = await getClient();
+          const explicitDrumKit = item.drumKit ?? (item.properties?.drumKit as string | undefined);
+          const explicitInstrument = item.instrument ?? (item.properties?.instrument as string | undefined);
+          const orchestralVoice = item.properties?.orchestralVoice as string | undefined;
+
+          let drumSlug = explicitDrumKit ? resolveGmDrumSlug(explicitDrumKit) : undefined;
+          if (drumSlug) {
+            gakkiPreset = await client.presets.getDrums(drumSlug);
+            console.error(`[add-entity] gakki drum preset: slug=${drumSlug}`);
+          } else {
+            // Walk through the user's inputs from most specific to least:
+            // explicit `instrument`, then `orchestralVoice` / properties, then
+            // the raw `entityType` they typed ("violin", "french horn", ...).
+            const slug =
+              (explicitInstrument && resolveGmInstrumentSlug(explicitInstrument)) ||
+              resolveGmInstrumentSlugFromHints({
+                instrument: explicitInstrument,
+                orchestralVoice,
+              }) ||
+              resolveGmInstrumentSlug(item.entityType);
+            if (slug) {
+              gakkiPreset = await client.presets.getInstrument(slug);
+              console.error(`[add-entity] gakki instrument preset: entityType=${JSON.stringify(item.entityType)}, slug=${slug}`);
+            } else {
+              console.error(`[add-entity] gakki resolved without a specific preset — will load default (acoustic grand piano)`);
+            }
+          }
+        } else if (item.instrument || item.drumKit) {
+          console.error(`[add-entity] instrument/drumKit hints ignored for non-gakki type '${resolvedType}'`);
+        }
+
+        resolvedItems.push({
+          resolvedType,
+          posX,
+          posY,
+          properties: item.properties,
+          autoConnectToMixer: item.autoConnectToMixer,
+          gakkiPreset,
+        });
       }
 
       const doc = await getDocument();
@@ -744,17 +818,48 @@ srv.registerTool(
           }> = [];
 
           for (const item of resolvedItems) {
-            const { resolvedType, posX, posY, properties } = item;
-            const entityProperties = {
-              ...(properties || {}),
-              positionX: posX,
-              positionY: posY,
-              gain: 0.5,
-              displayName: (properties?.displayName as string) ?? `${resolvedType} ${autoLayoutOffset}`,
-            };
+            const { resolvedType, posX, posY, properties, gakkiPreset } = item;
+            const displayName =
+              (properties?.displayName as string) ?? `${resolvedType} ${autoLayoutOffset}`;
 
-            const newEntity = t.create(resolvedType as any, entityProperties);
-            if (!newEntity) return { error: `Failed to create entity: t.create returned undefined` };
+            // 0.0.15+: when we prefetched a GM preset for a gakki device, use
+            // `createDeviceFromPreset` so the preset is applied atomically with
+            // creation (no separate transaction needed). This fixes cases like
+            // "add a violin" creating a gakki on the default grand-piano preset.
+            let newEntity: any;
+            if (resolvedType === "gakki" && gakkiPreset !== undefined) {
+              newEntity = (t as any).createDeviceFromPreset(gakkiPreset);
+              if (!newEntity) return { error: `Failed to create gakki from preset` };
+              const fields = newEntity.fields as any;
+              if (fields?.positionX) t.update(fields.positionX, posX);
+              if (fields?.positionY) t.update(fields.positionY, posY);
+              if (fields?.displayName) t.update(fields.displayName, displayName);
+              if (fields?.gain) t.update(fields.gain, 0.5);
+              // Allow user-provided properties (e.g. gain overrides) to win.
+              if (properties) {
+                for (const [key, value] of Object.entries(properties)) {
+                  if (["instrument", "drumKit", "orchestralVoice", "displayName"].includes(key)) continue;
+                  const field = fields?.[key];
+                  if (field && typeof field === "object" && "value" in field) {
+                    try { t.update(field, value); } catch { /* best-effort */ }
+                  }
+                }
+              }
+            } else {
+              const entityProperties = {
+                ...(properties || {}),
+                positionX: posX,
+                positionY: posY,
+                gain: 0.5,
+                displayName,
+              };
+              // Strip hint-only keys that aren't real entity fields.
+              delete (entityProperties as any).instrument;
+              delete (entityProperties as any).drumKit;
+              delete (entityProperties as any).orchestralVoice;
+              newEntity = t.create(resolvedType as any, entityProperties);
+              if (!newEntity) return { error: `Failed to create entity: t.create returned undefined` };
+            }
 
             if (item.autoConnectToMixer !== false) {
               connectDeviceToStagebox(t, newEntity, resolvedType);
@@ -916,7 +1021,7 @@ srv.registerTool(
 
         let gakkiPreset: unknown | undefined = undefined;
         if (!item.playerEntityId && instrumentType === "gakki") {
-          const presetUuid = resolveGakkiPresetUuidFromHints({
+          const slug = resolveGmInstrumentSlugFromHints({
             instrument: item.instrument,
             orchestralVoice: item.orchestralVoice,
             abcNotation: normalizeAbcNotation(item.abcNotation),
@@ -924,12 +1029,12 @@ srv.registerTool(
           console.error(
             `[add-abc-track] gakki preset resolution: instrument=${JSON.stringify(item.instrument)}, ` +
             `orchestralVoice=${JSON.stringify(item.orchestralVoice)}, ` +
-            `resolvedPresetUuid=${presetUuid ?? "none"}`
+            `resolvedSlug=${slug ?? "none"}`
           );
-          if (presetUuid) {
+          if (slug) {
             const client = await getClient();
-            gakkiPreset = await client.presets.get(`presets/${presetUuid}`);
-            console.error(`[add-abc-track] fetched gakki preset for uuid=${presetUuid}, preset loaded=${gakkiPreset != null}`);
+            gakkiPreset = await client.presets.getInstrument(slug);
+            console.error(`[add-abc-track] fetched gakki preset for slug=${slug}, preset loaded=${gakkiPreset != null}`);
           } else {
             console.error(`[add-abc-track] WARNING: no gakki preset resolved — instrument will use default sound`);
           }
@@ -945,8 +1050,6 @@ srv.registerTool(
           autoConnectToMixer: item.autoConnectToMixer,
         });
       }
-
-      const presetApplications: Array<{ entityId: string; preset: unknown }> = [];
 
       const result = await doc.modify((t) => {
         try {
@@ -967,18 +1070,32 @@ srv.registerTool(
               const posX = item.x ?? autoLayoutOffset * 120;
               const posY = item.y ?? 0;
               autoLayoutOffset++;
-              const createOpts: Record<string, unknown> = {
-                positionX: posX,
-                positionY: posY,
-                displayName: `${item.instrumentType} ${autoLayoutOffset}`,
-              };
-              const player = t.create(item.instrumentType as any, createOpts);
-              if (!player) {
-                return { error: `Failed to create ${item.instrumentType} instrument` };
-              }
+              const displayName = `${item.instrumentType} ${autoLayoutOffset}`;
+
+              // 0.0.15+: if we fetched a GM preset for a gakki device, create the
+              // device directly from the preset so we don't need a second
+              // transaction to apply it. Otherwise fall back to a plain create().
+              let player: any;
               if (item.instrumentType === "gakki" && item.gakkiPreset !== undefined) {
-                presetApplications.push({ entityId: (player as any).id, preset: item.gakkiPreset });
+                player = (t as any).createDeviceFromPreset(item.gakkiPreset);
+                if (!player) {
+                  return { error: `Failed to create gakki from preset` };
+                }
+                const fields = player.fields as any;
+                if (fields?.positionX) t.update(fields.positionX, posX);
+                if (fields?.positionY) t.update(fields.positionY, posY);
+                if (fields?.displayName) t.update(fields.displayName, displayName);
+              } else {
+                player = t.create(item.instrumentType as any, {
+                  positionX: posX,
+                  positionY: posY,
+                  displayName,
+                });
+                if (!player) {
+                  return { error: `Failed to create ${item.instrumentType} instrument` };
+                }
               }
+
               if (item.autoConnectToMixer !== false) {
                 connectDeviceToStagebox(t, player, item.instrumentType);
               }
@@ -1045,21 +1162,6 @@ srv.registerTool(
           return { error: innerError instanceof Error ? innerError.message : String(innerError) };
         }
       });
-
-      if (!("error" in result) && presetApplications.length > 0) {
-        console.error(`[add-abc-track] applying ${presetApplications.length} gakki preset(s) in separate transaction`);
-        for (const { entityId, preset } of presetApplications) {
-          await doc.modify((t) => {
-            const entity = t.entities.getEntity(entityId);
-            if (entity) {
-              (t as any).applyPresetTo(entity, preset);
-              console.error(`[add-abc-track] applied preset to gakki entity ${entityId}`);
-            } else {
-              console.error(`[add-abc-track] WARNING: gakki entity ${entityId} not found for preset application`);
-            }
-          });
-        }
-      }
 
       if ("error" in result) {
         throw new Error(result.error as string);
@@ -2215,7 +2317,7 @@ srv.registerTool(
   }) => {
     try {
       const client = await getClient();
-      const raw = await client.presets.list(
+      const raw = await client.presets.search(
         args.deviceType as any,
         args.textSearch,
       );
@@ -2256,21 +2358,72 @@ srv.registerTool(
   "apply-preset",
   {
     description: [
-      "Apply a preset (by id) to an existing entity. The entity type must match the preset's device type.",
-      "Use after list-presets to pick a preset id. Supports uuid or 'presets/{uuid}' form.",
+      "Apply a preset to an existing entity. The entity type must match the preset's device type.",
+      "Exactly one of presetID, instrumentSlug, or drumKitSlug must be provided:",
+      "  - presetID: uuid or 'presets/{uuid}' — use after list-presets.",
+      "  - instrumentSlug: GM instrument slug for gakki ('violin', 'french-horn', 'marimba', ...).",
+      "  - drumKitSlug: GM drum-kit slug for gakki ('jazz-kit', 'room-kit', ...).",
     ].join("\n"),
     inputSchema: z.object({
       entityID: z.string().describe("ID of the target device entity."),
       presetID: z
         .string()
+        .optional()
         .describe("Preset id - either a uuid or 'presets/{uuid}'."),
+      instrumentSlug: z
+        .string()
+        .optional()
+        .describe("GM instrument slug (gakki only). Resolved against the SDK's GmInstrumentSlug list, with synonyms like 'piano' → 'acoustic-piano'."),
+      drumKitSlug: z
+        .string()
+        .optional()
+        .describe("GM drum-kit slug (gakki only). Resolved against the SDK's GmDrumSlug list, with synonyms like 'jazz' → 'jazz-kit'."),
     }),
   },
-  async (args: { entityID: string; presetID: string }) => {
+  async (args: {
+    entityID: string;
+    presetID?: string;
+    instrumentSlug?: string;
+    drumKitSlug?: string;
+  }) => {
     try {
       const client = await getClient();
       const doc = await getDocument();
-      const preset = await client.presets.get(args.presetID);
+
+      const provided = [args.presetID, args.instrumentSlug, args.drumKitSlug].filter(
+        (x): x is string => typeof x === "string" && x.trim() !== "",
+      );
+      if (provided.length !== 1) {
+        throw new Error(
+          "Exactly one of presetID, instrumentSlug, or drumKitSlug must be provided.",
+        );
+      }
+
+      let preset: unknown;
+      let presetDescription: string;
+      if (args.presetID) {
+        preset = await client.presets.get(args.presetID);
+        presetDescription = `preset ${args.presetID}`;
+      } else if (args.instrumentSlug) {
+        const slug = resolveGmInstrumentSlug(args.instrumentSlug);
+        if (!slug) {
+          throw new Error(
+            `Unknown GM instrument slug: '${args.instrumentSlug}'. Expected a GmInstrumentSlug (e.g. 'violin', 'french-horn', 'marimba').`,
+          );
+        }
+        preset = await client.presets.getInstrument(slug);
+        presetDescription = `GM instrument '${slug}'`;
+      } else {
+        const slug = resolveGmDrumSlug(args.drumKitSlug!);
+        if (!slug) {
+          throw new Error(
+            `Unknown GM drum-kit slug: '${args.drumKitSlug}'. Expected a GmDrumSlug (e.g. 'standard-kit', 'jazz-kit', 'room-kit').`,
+          );
+        }
+        preset = await client.presets.getDrums(slug);
+        presetDescription = `GM drum kit '${slug}'`;
+      }
+
       const result = await doc.modify((t) => {
         const entity = t.entities.getEntity(args.entityID);
         if (!entity)
@@ -2292,7 +2445,7 @@ srv.registerTool(
         content: [
           {
             type: "text",
-            text: `Applied preset ${args.presetID} to entity ${args.entityID}.`,
+            text: `Applied ${presetDescription} to entity ${args.entityID}.`,
           },
         ],
       };

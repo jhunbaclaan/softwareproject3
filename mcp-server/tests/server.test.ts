@@ -470,7 +470,7 @@ describe("MCP Server", () => {
       });
       await loadServerWithDocument(doc, {
         presets: {
-          list: listMock,
+          search: listMock,
           get: vi.fn(),
         },
       });
@@ -507,7 +507,7 @@ describe("MCP Server", () => {
       });
       await loadServerWithDocument(doc, {
         presets: {
-          list: listMock,
+          search: listMock,
           get: vi.fn(),
         },
       });
@@ -615,6 +615,296 @@ describe("MCP Server", () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Failed to apply preset");
       expect(result.content[0].text).toContain("missing-entity");
+    });
+
+    it("apply-preset resolves instrumentSlug via client.presets.getInstrument", async () => {
+      const entity = { id: "gakki-1", entityType: "gakki", fields: {} };
+      const applied: Array<{ entity: unknown; preset: unknown }> = [];
+      const violinPreset = { meta: { id: "presets/violin-uuid" } };
+      const getInstrumentMock = vi.fn(async () => violinPreset);
+      const getDrumsMock = vi.fn();
+
+      const doc = {
+        connected: {
+          getValue: () => true,
+          subscribe: () => ({ terminate: () => undefined }),
+        },
+        events: {
+          onCreate: () => ({ terminate: () => undefined }),
+          onRemove: () => ({ terminate: () => undefined }),
+        },
+        queryEntities: { get: () => [entity] },
+        start: vi.fn(async () => undefined),
+        stop: vi.fn(async () => undefined),
+        modify: vi.fn(async (cb: (t: any) => unknown) =>
+          cb({
+            entities: {
+              getEntity: (id: string) => (id === "gakki-1" ? entity : undefined),
+            },
+            applyPresetTo: (target: unknown, incomingPreset: unknown) => {
+              applied.push({ entity: target, preset: incomingPreset });
+            },
+          }),
+        ),
+      };
+
+      await loadServerWithDocument(doc as any, {
+        presets: {
+          get: vi.fn(),
+          getInstrument: getInstrumentMock,
+          getDrums: getDrumsMock,
+        },
+      });
+
+      const handler = registeredTools.get("apply-preset");
+      if (!handler) throw new Error("apply-preset tool missing");
+
+      // "violin" is already a canonical GmInstrumentSlug so it passes straight through.
+      const result = await handler({
+        entityID: "gakki-1",
+        instrumentSlug: "violin",
+      });
+
+      expect(result.isError).toBeUndefined();
+      expect(getInstrumentMock).toHaveBeenCalledWith("violin");
+      expect(getDrumsMock).not.toHaveBeenCalled();
+      expect(applied).toEqual([{ entity, preset: violinPreset }]);
+      expect(result.content[0].text).toContain("GM instrument 'violin'");
+      expect(result.content[0].text).toContain("gakki-1");
+    });
+
+    it("apply-preset resolves drumKitSlug synonyms via client.presets.getDrums", async () => {
+      const entity = { id: "gakki-drums", entityType: "gakki", fields: {} };
+      const applied: Array<{ entity: unknown; preset: unknown }> = [];
+      const jazzKitPreset = { meta: { id: "presets/jazz-kit-uuid" } };
+      const getDrumsMock = vi.fn(async () => jazzKitPreset);
+
+      const doc = {
+        connected: {
+          getValue: () => true,
+          subscribe: () => ({ terminate: () => undefined }),
+        },
+        events: {
+          onCreate: () => ({ terminate: () => undefined }),
+          onRemove: () => ({ terminate: () => undefined }),
+        },
+        queryEntities: { get: () => [entity] },
+        start: vi.fn(async () => undefined),
+        stop: vi.fn(async () => undefined),
+        modify: vi.fn(async (cb: (t: any) => unknown) =>
+          cb({
+            entities: {
+              getEntity: (id: string) => (id === "gakki-drums" ? entity : undefined),
+            },
+            applyPresetTo: (target: unknown, incomingPreset: unknown) => {
+              applied.push({ entity: target, preset: incomingPreset });
+            },
+          }),
+        ),
+      };
+
+      await loadServerWithDocument(doc as any, {
+        presets: {
+          get: vi.fn(),
+          getInstrument: vi.fn(),
+          getDrums: getDrumsMock,
+        },
+      });
+
+      const handler = registeredTools.get("apply-preset");
+      if (!handler) throw new Error("apply-preset tool missing");
+
+      // "jazz" is a synonym of the canonical "jazz-kit" slug.
+      const result = await handler({
+        entityID: "gakki-drums",
+        drumKitSlug: "jazz",
+      });
+
+      expect(result.isError).toBeUndefined();
+      expect(getDrumsMock).toHaveBeenCalledWith("jazz-kit");
+      expect(applied).toEqual([{ entity, preset: jazzKitPreset }]);
+      expect(result.content[0].text).toContain("GM drum kit 'jazz-kit'");
+    });
+
+    it("apply-preset rejects when no slug or preset id is provided", async () => {
+      const { doc } = makeMockDocument({
+        tempoBpm: "tempoField",
+        signatureNumerator: "numField",
+        signatureDenominator: "denField",
+      });
+      await loadServerWithDocument(doc, {
+        presets: {
+          get: vi.fn(),
+          getInstrument: vi.fn(),
+          getDrums: vi.fn(),
+        },
+      });
+
+      const handler = registeredTools.get("apply-preset");
+      if (!handler) throw new Error("apply-preset tool missing");
+
+      const result = await handler({ entityID: "anything" });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Exactly one of presetID");
+    });
+
+    it("apply-preset rejects an unknown instrumentSlug before hitting the SDK", async () => {
+      const getInstrumentMock = vi.fn();
+      const { doc } = makeMockDocument({
+        tempoBpm: "tempoField",
+        signatureNumerator: "numField",
+        signatureDenominator: "denField",
+      });
+      await loadServerWithDocument(doc, {
+        presets: {
+          get: vi.fn(),
+          getInstrument: getInstrumentMock,
+          getDrums: vi.fn(),
+        },
+      });
+
+      const handler = registeredTools.get("apply-preset");
+      if (!handler) throw new Error("apply-preset tool missing");
+
+      const result = await handler({
+        entityID: "gakki-1",
+        instrumentSlug: "definitely-not-an-instrument",
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Unknown GM instrument slug");
+      expect(getInstrumentMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("add-entity preset-aware flow", () => {
+    function makeGakkiDoc() {
+      const createdEntities: Array<{ type: string; id: string; fromPreset: unknown }> = [];
+      const updates: Array<{ field: string; value: unknown }> = [];
+      let idCounter = 0;
+
+      const makeField = (name: string) => ({
+        value: undefined as unknown,
+        // Use a stable sentinel so t.update can identify which field was written.
+        __name: name,
+      });
+
+      const doc = {
+        connected: {
+          getValue: () => true,
+          subscribe: () => ({ terminate: () => undefined }),
+        },
+        events: {
+          onCreate: () => ({ terminate: () => undefined }),
+          onRemove: () => ({ terminate: () => undefined }),
+        },
+        queryEntities: {
+          get: () => [],
+          ofTypes: () => [],
+        },
+        start: vi.fn(async () => undefined),
+        stop: vi.fn(async () => undefined),
+        modify: vi.fn(async (cb: (t: any) => unknown) => {
+          const tx = {
+            entities: {
+              ofTypes: () => ({ get: () => [] }),
+              getEntity: () => undefined,
+            },
+            createDeviceFromPreset: (preset: unknown) => {
+              idCounter += 1;
+              const entity = {
+                id: `gakki-${idCounter}`,
+                entityType: "gakki",
+                fields: {
+                  positionX: makeField("positionX"),
+                  positionY: makeField("positionY"),
+                  displayName: makeField("displayName"),
+                  gain: makeField("gain"),
+                },
+              };
+              createdEntities.push({ type: "gakki", id: entity.id, fromPreset: preset });
+              return entity;
+            },
+            create: vi.fn(() => ({
+              id: "should-not-be-called",
+              entityType: "unexpected",
+              fields: {},
+            })),
+            update: (field: any, value: unknown) => {
+              updates.push({ field: field?.__name ?? "unknown", value });
+            },
+          };
+          return cb(tx);
+        }),
+      };
+
+      return { doc, createdEntities, updates };
+    }
+
+    it("creating a gakki with entityType='violin' loads the violin preset atomically", async () => {
+      const violinPreset = { meta: { id: "presets/violin-uuid" }, device: "gakki" };
+      const getInstrumentMock = vi.fn(async () => violinPreset);
+      const getDrumsMock = vi.fn();
+
+      const { doc, createdEntities, updates } = makeGakkiDoc();
+      await loadServerWithDocument(doc as any, {
+        presets: {
+          get: vi.fn(),
+          getInstrument: getInstrumentMock,
+          getDrums: getDrumsMock,
+        },
+      });
+
+      const handler = registeredTools.get("add-entity");
+      if (!handler) throw new Error("add-entity tool missing");
+
+      const result = await handler({ entityType: "violin" });
+
+      expect(result.isError).toBeUndefined();
+      expect(getInstrumentMock).toHaveBeenCalledWith("violin");
+      expect(getDrumsMock).not.toHaveBeenCalled();
+      expect(createdEntities).toHaveLength(1);
+      expect(createdEntities[0]).toEqual(
+        expect.objectContaining({ type: "gakki", fromPreset: violinPreset }),
+      );
+      // createDeviceFromPreset + position/displayName/gain follow-up updates all
+      // happened inside a single modify() call.
+      expect(doc.modify).toHaveBeenCalledTimes(1);
+      const fieldsWritten = updates.map((u) => u.field);
+      expect(fieldsWritten).toEqual(
+        expect.arrayContaining(["positionX", "positionY", "displayName", "gain"]),
+      );
+      expect(result.content[0].text).toContain("Added gakki");
+    });
+
+    it("creating a gakki with drumKit='jazz' loads the jazz-kit preset", async () => {
+      const jazzKit = { meta: { id: "presets/jazz-kit-uuid" } };
+      const getInstrumentMock = vi.fn();
+      const getDrumsMock = vi.fn(async () => jazzKit);
+
+      const { doc, createdEntities } = makeGakkiDoc();
+      await loadServerWithDocument(doc as any, {
+        presets: {
+          get: vi.fn(),
+          getInstrument: getInstrumentMock,
+          getDrums: getDrumsMock,
+        },
+      });
+
+      const handler = registeredTools.get("add-entity");
+      if (!handler) throw new Error("add-entity tool missing");
+
+      const result = await handler({
+        entityType: "gakki",
+        drumKit: "jazz",
+      });
+
+      expect(result.isError).toBeUndefined();
+      expect(getDrumsMock).toHaveBeenCalledWith("jazz-kit");
+      expect(getInstrumentMock).not.toHaveBeenCalled();
+      expect(createdEntities).toHaveLength(1);
+      expect(createdEntities[0].fromPreset).toBe(jazzKit);
     });
   });
 

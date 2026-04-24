@@ -8,8 +8,11 @@ import {
   levenshtein,
   resolveEntityType,
   resolveInstrumentType,
-  resolveGakkiPresetUuid,
-  resolveGakkiPresetUuidFromHints,
+  resolveGmInstrumentSlug,
+  resolveGmInstrumentSlugFromHints,
+  resolveGmDrumSlug,
+  isGmInstrumentSlug,
+  isGmDrumSlug,
   parseAbcToNotes,
   normalizeAbcNotation,
   midiPitchToAbc,
@@ -25,10 +28,12 @@ import {
   AUDIO_OUTPUT_FIELD,
   TICKS_WHOLE,
   TICKS_QUARTER,
-  GAKKI_NAME_SYNONYMS,
-  GAKKI_TEXT_PATTERNS,
+  GM_INSTRUMENT_SLUGS,
+  GM_INSTRUMENT_SLUG_SYNONYMS,
+  GM_DRUM_SLUGS,
+  GM_DRUM_SLUG_SYNONYMS,
+  GM_INSTRUMENT_TEXT_PATTERNS,
   STYLE_MAP,
-  gakkiByGmName,
   refId,
 } from '../server-utils.js';
 
@@ -145,95 +150,149 @@ describe('Instrument Type Resolution', () => {
   });
 });
 
-// ==================== GAKKI PRESET RESOLUTION TESTS ====================
+// ==================== GM INSTRUMENT / DRUM SLUG TESTS ====================
 
-describe('Gakki Preset Resolution', () => {
-  const hasGakkiData = Object.keys(gakkiByGmName).length > 0;
-
-  it('should handle synonym lookups', () => {
-    // GAKKI_NAME_SYNONYMS maps horn → french_horn, brass → brass_section, etc.
-    expect(GAKKI_NAME_SYNONYMS['horn']).toBe('french_horn');
-    expect(GAKKI_NAME_SYNONYMS['brass']).toBe('brass_section');
-    expect(GAKKI_NAME_SYNONYMS['strings']).toBe('string_ensemble_1');
+describe('GM Instrument Slug Resolution', () => {
+  it('should expose the full SDK slug catalog (128 instruments, 8 drum kits)', () => {
+    expect(GM_INSTRUMENT_SLUGS.size).toBe(128);
+    expect(GM_DRUM_SLUGS.size).toBe(8);
+    expect(GM_INSTRUMENT_SLUGS.has('violin')).toBe(true);
+    expect(GM_INSTRUMENT_SLUGS.has('french-horn')).toBe(true);
+    expect(GM_INSTRUMENT_SLUGS.has('acoustic-piano')).toBe(true);
+    expect(GM_DRUM_SLUGS.has('jazz-kit')).toBe(true);
+    expect(GM_DRUM_SLUGS.has('standard-kit')).toBe(true);
   });
 
-  it('should return undefined for unknown instrument names', () => {
-    expect(resolveGakkiPresetUuid('totally_unknown_instrument')).toBeUndefined();
+  it('isGmInstrumentSlug narrows correctly', () => {
+    expect(isGmInstrumentSlug('violin')).toBe(true);
+    expect(isGmInstrumentSlug('not-a-real-slug')).toBe(false);
   });
 
-  it('should normalize input (lowercase, underscores)', () => {
-    // Even if we don't have gakki data, the function normalizes input correctly
-    const result = resolveGakkiPresetUuid('UNKNOWN THING');
-    expect(result).toBeUndefined();
+  it('isGmDrumSlug narrows correctly', () => {
+    expect(isGmDrumSlug('jazz-kit')).toBe(true);
+    expect(isGmDrumSlug('violin')).toBe(false);
   });
 
-  it.skipIf(!hasGakkiData)('should resolve direct GM name lookups when data available', () => {
-    const firstKey = Object.keys(gakkiByGmName)[0];
-    if (firstKey) {
-      expect(resolveGakkiPresetUuid(firstKey)).toBe(gakkiByGmName[firstKey]);
+  it('returns the slug itself when already canonical', () => {
+    expect(resolveGmInstrumentSlug('violin')).toBe('violin');
+    expect(resolveGmInstrumentSlug('french-horn')).toBe('french-horn');
+    expect(resolveGmInstrumentSlug('marimba')).toBe('marimba');
+    expect(resolveGmInstrumentSlug('pan-flute')).toBe('pan-flute');
+  });
+
+  it('normalizes input (case, whitespace, underscores)', () => {
+    expect(resolveGmInstrumentSlug('  Violin  ')).toBe('violin');
+    expect(resolveGmInstrumentSlug('FRENCH HORN')).toBe('french-horn');
+    expect(resolveGmInstrumentSlug('french_horn')).toBe('french-horn');
+    expect(resolveGmInstrumentSlug('pan flute')).toBe('pan-flute');
+  });
+
+  it('maps friendly synonyms to canonical slugs', () => {
+    expect(resolveGmInstrumentSlug('piano')).toBe('acoustic-piano');
+    expect(resolveGmInstrumentSlug('grand piano')).toBe('acoustic-piano');
+    expect(resolveGmInstrumentSlug('acoustic grand piano')).toBe('acoustic-piano');
+    expect(resolveGmInstrumentSlug('electric piano')).toBe('electronic-piano-1');
+    expect(resolveGmInstrumentSlug('rhodes')).toBe('electronic-piano-1');
+    expect(resolveGmInstrumentSlug('strings')).toBe('string-section');
+    expect(resolveGmInstrumentSlug('brass')).toBe('brass-section');
+    expect(resolveGmInstrumentSlug('horn')).toBe('french-horn');
+    expect(resolveGmInstrumentSlug('sax')).toBe('alto-sax');
+    expect(resolveGmInstrumentSlug('organ')).toBe('church-organ');
+    expect(resolveGmInstrumentSlug('choir')).toBe('choir-aahs');
+  });
+
+  it('returns undefined for unknown inputs', () => {
+    expect(resolveGmInstrumentSlug('totally-unknown-instrument')).toBeUndefined();
+    expect(resolveGmInstrumentSlug('UNKNOWN THING')).toBeUndefined();
+    expect(resolveGmInstrumentSlug('')).toBeUndefined();
+  });
+
+  it('synonym table points only at valid canonical slugs', () => {
+    for (const slug of Object.values(GM_INSTRUMENT_SLUG_SYNONYMS)) {
+      expect(GM_INSTRUMENT_SLUGS.has(slug)).toBe(true);
     }
   });
 
-  it('should prioritize orchestralVoice over instrument in hints', () => {
-    // resolveGakkiPresetUuidFromHints checks orchestralVoice first
-    const result = resolveGakkiPresetUuidFromHints({
-      instrument: 'unknown',
-      orchestralVoice: 'also_unknown',
-      abcNotation: 'X:1\nK:C\nCDEF|',
-    });
-    // Both are unknown, so fallback to text patterns in ABC
-    // No orchestral text in ABC, so undefined
-    expect(result).toBeUndefined();
-  });
-
-  it('should have piano-related synonym entries', () => {
-    expect(GAKKI_NAME_SYNONYMS['piano']).toBe('acoustic_grand_piano');
-    expect(GAKKI_NAME_SYNONYMS['grand_piano']).toBe('acoustic_grand_piano');
-    expect(GAKKI_NAME_SYNONYMS['acoustic_piano']).toBe('acoustic_grand_piano');
-    expect(GAKKI_NAME_SYNONYMS['electric_piano']).toBe('electric_piano_1');
-  });
-
-  it('should resolve "piano" via synonym lookup', () => {
-    const result = resolveGakkiPresetUuid('piano');
-    if (Object.keys(gakkiByGmName).length > 0) {
-      expect(result).toBe(gakkiByGmName['acoustic_grand_piano']);
+  it('text patterns all point at valid canonical slugs', () => {
+    for (const { slug } of GM_INSTRUMENT_TEXT_PATTERNS) {
+      expect(GM_INSTRUMENT_SLUGS.has(slug)).toBe(true);
     }
   });
+});
 
-  it('should resolve "grand_piano" via synonym lookup', () => {
-    const result = resolveGakkiPresetUuid('grand piano');
-    if (Object.keys(gakkiByGmName).length > 0) {
-      expect(result).toBe(gakkiByGmName['acoustic_grand_piano']);
-    }
+describe('GM Drum Slug Resolution', () => {
+  it('returns the slug itself when already canonical', () => {
+    expect(resolveGmDrumSlug('jazz-kit')).toBe('jazz-kit');
+    expect(resolveGmDrumSlug('standard-kit')).toBe('standard-kit');
   });
 
-  it('should resolve "electric_piano" via synonym lookup', () => {
-    const result = resolveGakkiPresetUuid('electric piano');
-    if (Object.keys(gakkiByGmName).length > 0) {
-      expect(result).toBe(gakkiByGmName['electric_piano_1']);
-    }
+  it('maps friendly synonyms to canonical slugs', () => {
+    expect(resolveGmDrumSlug('jazz')).toBe('jazz-kit');
+    expect(resolveGmDrumSlug('room')).toBe('room-kit');
+    expect(resolveGmDrumSlug('brush')).toBe('brush-kit');
+    expect(resolveGmDrumSlug('brushes')).toBe('brush-kit');
+    expect(resolveGmDrumSlug('orchestra')).toBe('orchestra-kit');
+    expect(resolveGmDrumSlug('drums')).toBe('standard-kit');
+    expect(resolveGmDrumSlug('kit')).toBe('standard-kit');
   });
 
-  it('should have piano-related text patterns', () => {
-    const pianoPattern = GAKKI_TEXT_PATTERNS.find(p => p.gmKey === 'acoustic_grand_piano' && p.pattern.test('piano'));
-    expect(pianoPattern).toBeDefined();
-
-    const electricPianoPattern = GAKKI_TEXT_PATTERNS.find(p => p.gmKey === 'electric_piano_1' && p.pattern.test('electric piano'));
-    expect(electricPianoPattern).toBeDefined();
-
-    const grandPianoPattern = GAKKI_TEXT_PATTERNS.find(p => p.gmKey === 'acoustic_grand_piano' && p.pattern.test('grand piano'));
-    expect(grandPianoPattern).toBeDefined();
+  it('returns undefined for unknown kits', () => {
+    expect(resolveGmDrumSlug('not-a-kit')).toBeUndefined();
   });
 
-  it('should resolve piano from orchestralVoice hint via resolveGakkiPresetUuidFromHints', () => {
-    const result = resolveGakkiPresetUuidFromHints({
-      instrument: 'gakki',
-      orchestralVoice: 'piano',
-      abcNotation: 'X:1\nK:C\nCDEF|',
-    });
-    if (Object.keys(gakkiByGmName).length > 0) {
-      expect(result).toBe(gakkiByGmName['acoustic_grand_piano']);
+  it('synonym table points only at valid canonical drum slugs', () => {
+    for (const slug of Object.values(GM_DRUM_SLUG_SYNONYMS)) {
+      expect(GM_DRUM_SLUGS.has(slug)).toBe(true);
     }
+  });
+});
+
+describe('GM Instrument Slug Resolution — hints', () => {
+  it('prioritizes orchestralVoice over instrument', () => {
+    expect(
+      resolveGmInstrumentSlugFromHints({
+        instrument: 'gakki',
+        orchestralVoice: 'violin',
+        abcNotation: 'X:1\nK:C\nCDEF|',
+      }),
+    ).toBe('violin');
+  });
+
+  it('falls back to the instrument hint when orchestralVoice is missing', () => {
+    expect(
+      resolveGmInstrumentSlugFromHints({
+        instrument: 'french horn',
+        abcNotation: 'X:1\nK:C\nCDEF|',
+      }),
+    ).toBe('french-horn');
+  });
+
+  it('falls back to a text-pattern match against the ABC notation', () => {
+    expect(
+      resolveGmInstrumentSlugFromHints({
+        abcNotation: 'X:1\nT:Sunrise for Violin\nK:D\nDEFG|',
+      }),
+    ).toBe('violin');
+  });
+
+  it('returns undefined when no signal is available', () => {
+    expect(
+      resolveGmInstrumentSlugFromHints({
+        instrument: 'unknown',
+        orchestralVoice: 'also_unknown',
+        abcNotation: 'X:1\nK:C\nCDEF|',
+      }),
+    ).toBeUndefined();
+  });
+
+  it('resolves piano from orchestralVoice hint', () => {
+    expect(
+      resolveGmInstrumentSlugFromHints({
+        instrument: 'gakki',
+        orchestralVoice: 'piano',
+        abcNotation: 'X:1\nK:C\nCDEF|',
+      }),
+    ).toBe('acoustic-piano');
   });
 });
 
